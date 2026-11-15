@@ -243,6 +243,7 @@ export function simulateMatch(
       bankBalanceUSD: state.org.bankBalanceUSD + matchPrizeUSD + sponsorBonus,
       reputation: Math.max(0, Math.min(100, state.org.reputation + repDelta)),
       followers: state.org.followers + followerGain,
+      orgXp: Math.min(10000, (state.org.orgXp ?? 0) + (won ? 120 : 40)),
       divisions: updatedDivisions,
       trophies: updatedTrophies,
     },

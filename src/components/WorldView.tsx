@@ -1,15 +1,18 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Globe2, Newspaper, Trophy } from 'lucide-react';
 import { getGameById } from '../data/esportsTitles';
 import { formatCurrency } from '../engine/economy';
 import { GameState } from '../types/game';
 import { OrgCrest } from './OrgCrest';
+import tournamentArenaImg from '../assets/images/tournament_world_arena_1794780500054.jpg';
 
 interface WorldViewProps {
   state: GameState;
 }
 
 export const WorldView: React.FC<WorldViewProps> = ({ state }) => {
+  const [bannerFailed, setBannerFailed] = useState(false);
+
   const leaderboard = [
     ...state.rivals.map((r) => ({
       id: r.id,
@@ -49,15 +52,15 @@ export const WorldView: React.FC<WorldViewProps> = ({ state }) => {
 
   return (
     <div className="space-y-6">
-      {/* Global Organization Rankings */}
-      <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 space-y-4">
+      {/* Global League Standings Table */}
+      <section className="fm-panel p-6 space-y-4">
         <div>
           <h2 className="font-display text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-            <Globe2 size={20} className="text-blue-600" />
-            Global Organization Rankings
+            <Globe2 size={20} className="text-blue-500" />
+            Global Organization Power Rankings
           </h2>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            Rival organizations compete, grow, decline, and face financial shifts independently each week.
+            Rival organizations grow, slump, win international trophies, or face bankruptcy independently every week.
           </p>
         </div>
 
@@ -65,22 +68,22 @@ export const WorldView: React.FC<WorldViewProps> = ({ state }) => {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-slate-200 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400">
-                <th className="py-2.5 pr-3 font-medium">Rank</th>
-                <th className="py-2.5 pr-4 font-medium">Organization</th>
-                <th className="py-2.5 pr-4 font-medium">Status</th>
+                <th className="py-2.5 pr-3 font-medium">Pos</th>
+                <th className="py-2.5 pr-4 font-medium">Club</th>
+                <th className="py-2.5 pr-4 font-medium">Status &amp; Form</th>
                 <th className="py-2.5 pr-4 font-medium text-right">Rep</th>
                 <th className="py-2.5 pr-4 font-medium text-right">Trophies</th>
                 <th className="py-2.5 font-medium text-right">Valuation</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-sm">
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80 text-sm">
               {leaderboard.map((row, idx) => (
                 <tr
                   key={row.id}
                   className={
                     row.isPlayer
-                      ? 'bg-blue-50/70 dark:bg-blue-950/30 font-medium'
-                      : 'hover:bg-slate-50/70 dark:hover:bg-slate-800/30'
+                      ? 'bg-blue-600/10 font-medium'
+                      : 'hover:bg-slate-50 dark:hover:bg-[#0D121C]'
                   }
                 >
                   <td className="py-3 pr-3 font-mono text-xs text-slate-500 tabular-nums">
@@ -100,8 +103,8 @@ export const WorldView: React.FC<WorldViewProps> = ({ state }) => {
                           {row.name}{' '}
                           <span className="font-mono text-xs text-slate-400">[{row.tag}]</span>
                           {row.isPlayer && (
-                            <span className="text-xs text-blue-600 dark:text-blue-400 ml-1.5">
-                              (You)
+                            <span className="text-xs text-blue-500 ml-1.5 font-semibold">
+                              (Your Club)
                             </span>
                           )}
                         </div>
@@ -111,14 +114,14 @@ export const WorldView: React.FC<WorldViewProps> = ({ state }) => {
                       </div>
                     </div>
                   </td>
-                  <td className="py-3 pr-4 text-xs">
+                  <td className="py-3 pr-4 text-xs whitespace-nowrap">
                     <span
                       className={
                         row.status === 'Bankrupt'
-                          ? 'text-red-600 font-semibold'
+                          ? 'text-red-500 font-semibold'
                           : row.status === 'Declining'
-                          ? 'text-amber-600 font-medium'
-                          : 'text-emerald-700 dark:text-emerald-400 font-medium'
+                          ? 'text-amber-500 font-medium'
+                          : 'text-emerald-500 font-medium'
                       }
                     >
                       {row.status} · {row.trend}
@@ -127,10 +130,10 @@ export const WorldView: React.FC<WorldViewProps> = ({ state }) => {
                   <td className="py-3 pr-4 font-mono text-xs text-right tabular-nums">
                     {row.reputation}
                   </td>
-                  <td className="py-3 pr-4 font-mono text-xs text-right tabular-nums">
+                  <td className="py-3 pr-4 font-mono text-xs text-right tabular-nums text-amber-500">
                     {row.trophies}
                   </td>
-                  <td className="py-3 font-mono text-xs font-semibold text-right tabular-nums">
+                  <td className="py-3 font-mono text-xs font-bold text-right tabular-nums">
                     {formatCurrency(row.valuationUSD, state.character.countryId, true)}
                   </td>
                 </tr>
@@ -141,16 +144,16 @@ export const WorldView: React.FC<WorldViewProps> = ({ state }) => {
       </section>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Esports World News */}
-        <section className="lg:col-span-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 space-y-4">
+        {/* Esports World Wire */}
+        <section className="lg:col-span-6 fm-panel p-6 space-y-4">
           <h3 className="font-display text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-            <Newspaper size={18} className="text-blue-600" />
-            Esports Wire &amp; News
+            <Newspaper size={18} className="text-blue-500" />
+            Global Esports Wire
           </h3>
           <div className="divide-y divide-slate-100 dark:divide-slate-800">
             {state.worldNews.map((item) => (
               <div key={item.id} className="py-3.5 space-y-1">
-                <div className="text-xs font-mono text-slate-400">Week {item.week}</div>
+                <div className="text-xs font-mono text-blue-500">Week {item.week}</div>
                 <div className="font-display font-semibold text-sm text-slate-900 dark:text-white">
                   {item.headline}
                 </div>
@@ -162,13 +165,29 @@ export const WorldView: React.FC<WorldViewProps> = ({ state }) => {
           </div>
         </section>
 
-        {/* Global Major & World Championships Overview */}
-        <section className="lg:col-span-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 space-y-4">
-          <h3 className="font-display text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-            <Trophy size={18} className="text-blue-600" />
-            Major International &amp; World Circuits
-          </h3>
-          <div className="divide-y divide-slate-100 dark:divide-slate-800 max-h-[460px] overflow-y-auto pr-1">
+        {/* International & World Championships */}
+        <section className="lg:col-span-6 fm-panel overflow-hidden flex flex-col">
+          <div className="relative h-36 bg-[#0D121C]">
+            {!bannerFailed && (
+              <img
+                src={tournamentArenaImg}
+                alt="International championship arena"
+                referrerPolicy="no-referrer"
+                onError={() => setBannerFailed(true)}
+                className="w-full h-full object-cover opacity-55"
+              />
+            )}
+            <div className="absolute inset-0 bg-gradient-to-t from-[#111723] via-[#111723]/55 to-transparent" />
+            <div className="absolute bottom-4 left-6 right-6 text-white">
+              <div className="text-xs font-semibold text-purple-300">Championship Calendar</div>
+              <h3 className="font-display text-lg font-bold flex items-center gap-2">
+                <Trophy size={18} className="text-amber-400" />
+                Major International &amp; World Circuits
+              </h3>
+            </div>
+          </div>
+
+          <div className="p-6 divide-y divide-slate-100 dark:divide-slate-800 max-h-[380px] overflow-y-auto">
             {state.tournaments
               .filter(
                 (t) =>
@@ -178,7 +197,7 @@ export const WorldView: React.FC<WorldViewProps> = ({ state }) => {
               .map((t) => (
                 <div key={t.id} className="py-3 flex items-center justify-between gap-3">
                   <div>
-                    <div className="text-xs text-slate-500">
+                    <div className="text-xs text-purple-500 font-medium">
                       {t.tier} · {getGameById(t.gameId).name}
                     </div>
                     <div className="font-display font-semibold text-sm text-slate-900 dark:text-white">
@@ -186,7 +205,7 @@ export const WorldView: React.FC<WorldViewProps> = ({ state }) => {
                     </div>
                   </div>
                   <div className="text-right shrink-0">
-                    <div className="font-mono text-sm font-semibold tabular-nums text-emerald-700 dark:text-emerald-400">
+                    <div className="font-mono text-sm font-bold tabular-nums text-emerald-500">
                       {formatCurrency(t.prizePoolUSD, state.character.countryId, true)}
                     </div>
                     <div className="text-[11px] text-slate-400">Req {t.minRankPoints} pts</div>

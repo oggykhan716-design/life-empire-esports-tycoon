@@ -165,14 +165,16 @@ export function evaluateContractOffer(
   const reqRep = minOrgRepByTier[player.tier];
   const reqFac = minFacilityByTier[player.tier];
 
-  if (state.org.reputation + state.character.connections * 0.15 < reqRep) {
+  const bypassGates = Boolean(state.isSandbox || state.devOverrides?.unlockAllFeatures);
+
+  if (!bypassGates && state.org.reputation + state.character.connections * 0.15 < reqRep) {
     return {
       accepted: false,
       reason: `${player.ign} (${player.tier}) declined: your organization needs higher industry reputation (${reqRep}+) before they commit.`,
     };
   }
 
-  if (state.org.facilityLevel < reqFac) {
+  if (!bypassGates && state.org.facilityLevel < reqFac) {
     return {
       accepted: false,
       reason: `${player.ign} declined: players of ${player.tier} caliber require Facility Level ${reqFac}+ training infrastructure.`,

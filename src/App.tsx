@@ -4,35 +4,52 @@ import {
   BookOpen,
   Briefcase,
   Building2,
+  FlaskConical,
   Gamepad2,
   Globe2,
   Home,
   Moon,
   Save,
+  Settings,
   Sun,
+  Terminal,
 } from 'lucide-react';
 import { BusinessView } from './components/BusinessView';
 import { CareerView } from './components/CareerView';
 import { CharacterCreation } from './components/CharacterCreation';
+import { DeveloperDashboardModal } from './components/DeveloperDashboardModal';
 import { EsportsView } from './components/EsportsView';
 import { HomeView } from './components/HomeView';
 import { EndingModal, EventModal, MatchModal, SaveModal } from './components/Modals';
+import { SettingsModal } from './components/SettingsModal';
 import { StoryView } from './components/StoryView';
 import { WorldView } from './components/WorldView';
 import { getGameById } from './data/esportsTitles';
 import { FACILITY_TIERS, STAFF_ROLES } from './data/facilitiesAndStaff';
 import { EDUCATION_PROGRAMS, JOBS } from './data/jobs';
 import { INVESTMENT_PRODUCTS, LIFESTYLE_ITEMS } from './data/lifestyleAndInvestments';
+import {
+  createSandboxGameState,
+  devCreatePaperTeam,
+  devSetOrgTypeAndStrategy,
+} from './engine/devAndSandbox';
 import { calculateOrgValuationUSD, formatCurrency } from './engine/economy';
 import { simulateMatch } from './engine/matchEngine';
 import { evaluateContractOffer } from './engine/playerGenerator';
 import {
   deleteSaveSlot,
+  DevSnapshot,
+  getDevModePreference,
   getLastActiveSlotId,
+  getSandboxSummary,
+  listDevSnapshots,
   listSaveSlots,
   loadGameFromSlot,
+  SANDBOX_SLOT_ID,
+  saveDevSnapshot,
   saveGameToSlot,
   SaveSlotSummary,
+  setDevModePreference,
 } from './engine/storage';
 import {
   advanceWeek,
@@ -52,6 +69,8 @@ import {
   LifestyleTier,
   MatchStrategy,
   NavTab,
+  OrgStrategy,
+  OrgType,
   StaffRoleId,
 } from './types/game';
 
@@ -94,12 +113,21 @@ export default function App() {
   });
 
   const [saves, setSaves] = useState<SaveSlotSummary[]>(() => listSaveSlots());
+  const [sandboxSummary, setSandboxSummary] = useState<SaveSlotSummary | null>(() =>
+    getSandboxSummary()
+  );
   const [activeTab, setActiveTab] = useState<NavTab>('home');
-  const [darkMode, setDarkMode] = useState(false);
+  const [darkMode, setDarkMode] = useState(true);
+  const [developerModeEnabled, setDeveloperModeEnabled] = useState<boolean>(() =>
+    getDevModePreference()
+  );
+  const [devSnapshots, setDevSnapshots] = useState<DevSnapshot[]>(() => listDevSnapshots());
   const [feedback, setFeedback] = useState<string | null>(null);
   const [showEventModal, setShowEventModal] = useState(false);
   const [activeMatchTournament, setActiveMatchTournament] = useState<ActiveTournament | null>(null);
   const [showSaveModal, setShowSaveModal] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showDevDashboard, setShowDevDashboard] = useState(false);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -110,10 +138,15 @@ export default function App() {
     }
   }, [darkMode]);
 
+  const refreshSlotSummaries = () => {
+    setSaves(listSaveSlots());
+    setSandboxSummary(getSandboxSummary());
+  };
+
   const commitState = (next: GameState, toastMessage?: string) => {
     setGameState(next);
-    saveGameToSlot(next, next.saveSlotId);
-    setSaves(listSaveSlots());
+    saveGameToSlot(next, next.isSandbox ? SANDBOX_SLOT_ID : next.saveSlotId);
+    refreshSlotSummaries();
     if (toastMessage) {
       setFeedback(toastMessage);
     }
@@ -125,10 +158,19 @@ export default function App() {
     return () => clearTimeout(t);
   }, [feedback]);
 
+  const handleToggleDeveloperMode = (enabled: boolean) => {
+    setDeveloperModeEnabled(enabled);
+    setDevModePreference(enabled);
+    if (!enabled) {
+      setShowDevDashboard(false);
+    }
+    setFeedback(enabled ? 'Developer Mode enabled.' : 'Developer Mode disabled.');
+  };
+
   const handleStartNewGame = (character: CharacterProfile, slotId: string) => {
     const fresh = createNewGameState(character, slotId);
     saveGameToSlot(fresh, slotId);
-    setSaves(listSaveSlots());
+    refreshSlotSummaries();
     setGameState(fresh);
     setActiveTab('home');
     setFeedback(`Career started in ${character.city}. Good luck!`);
@@ -145,17 +187,96 @@ export default function App() {
 
   const handleDeleteSave = (slotId: string) => {
     deleteSaveSlot(slotId);
-    setSaves(listSaveSlots());
+    refreshSlotSummaries();
+  };
+
+  const handleStartSandbox = (
+    character?: CharacterProfile,
+    orgType: OrgType = 'Global Franchise',
+    orgStrategy: OrgStrategy = 'International Expansion'
+  ) => {
+    const profile: CharacterProfile = character ??
+      gameState?.character ?? {
+        firstName: 'Alex',
+        lastName: 'Mercer',
+        age: 18,
+        gender: 'Male',
+        countryId: 'usa',
+        city: 'Los Angeles',
+        education: 'MBA',
+        personality: 'Visionary',
+        familyBackground: 'Working Class',
+        skills: {
+          workEthic: 90,
+          businessAcumen: 92,
+          esportsKnowledge: 95,
+          negotiation: 90,
+          leadership: 92,
+          marketing: 90,
+        },
+        reputation: 85,
+        connections: 60,
+        health: 100,
+        stress: 10,
+      };
+    const sbx = createSandboxGameState(profile, { orgType, orgStrategy });
+    saveGameToSlot(sbx, SANDBOX_SLOT_ID);
+    refreshSlotSummaries();
+    setGameState(sbx);
+    setActiveTab('home');
+    setFeedback('Sandbox Mode started with isolated save and unlimited resources.');
+  };
+
+  const handleResumeSandbox = () => {
+    const loaded = loadGameFromSlot(SANDBOX_SLOT_ID);
+    if (loaded) {
+      setGameState(loaded);
+      setActiveTab('home');
+      setFeedback(`Resumed Sandbox Mode (Year ${loaded.year}, Week ${loaded.week}).`);
+    }
+  };
+
+  const handleDeleteSandbox = () => {
+    deleteSaveSlot(SANDBOX_SLOT_ID);
+    refreshSlotSummaries();
+    if (gameState?.isSandbox) {
+      setGameState(null);
+    }
+    setFeedback('Deleted Sandbox save.');
   };
 
   if (!gameState) {
     return (
-      <CharacterCreation
-        existingSaves={saves}
-        onStartNewGame={handleStartNewGame}
-        onLoadSave={handleLoadSave}
-        onDeleteSave={handleDeleteSave}
-      />
+      <>
+        <CharacterCreation
+          existingSaves={saves}
+          sandboxSummary={sandboxSummary}
+          onStartNewGame={handleStartNewGame}
+          onLoadSave={handleLoadSave}
+          onDeleteSave={handleDeleteSave}
+          onStartSandbox={(char, orgType, orgStrategy) =>
+            handleStartSandbox(char, orgType, orgStrategy)
+          }
+          onResumeSandbox={handleResumeSandbox}
+          onDeleteSandbox={handleDeleteSandbox}
+          onOpenSettings={() => setShowSettingsModal(true)}
+        />
+        {showSettingsModal && (
+          <SettingsModal
+            state={null}
+            darkMode={darkMode}
+            developerModeEnabled={developerModeEnabled}
+            sandboxSummary={sandboxSummary}
+            onToggleDarkMode={() => setDarkMode(!darkMode)}
+            onToggleDeveloperMode={handleToggleDeveloperMode}
+            onOpenDeveloperDashboard={() => setShowDevDashboard(true)}
+            onStartSandbox={() => handleStartSandbox()}
+            onResumeSandbox={handleResumeSandbox}
+            onDeleteSandbox={handleDeleteSandbox}
+            onClose={() => setShowSettingsModal(false)}
+          />
+        )}
+      </>
     );
   }
 
@@ -775,7 +896,31 @@ export default function App() {
   const handleUpgradeFacility = (targetLevel: number) => {
     const fac = FACILITY_TIERS.find((f) => f.level === targetLevel);
     const costs = getEnergyCosts(gameState);
-    if (!fac || gameState.org.bankBalanceUSD < fac.costUSD || gameState.energy < costs.orgManagement) return;
+    const isInstant = Boolean(gameState.isSandbox || gameState.devOverrides?.instantUpgrades);
+    if (!fac) return;
+    if (!gameState.isSandbox && (gameState.org.bankBalanceUSD < fac.costUSD || gameState.energy < costs.orgManagement)) {
+      return;
+    }
+
+    if (isInstant) {
+      const next: GameState = {
+        ...gameState,
+        energy: gameState.isSandbox ? gameState.energy : gameState.energy - costs.orgManagement,
+        org: {
+          ...gameState.org,
+          bankBalanceUSD: gameState.isSandbox
+            ? gameState.org.bankBalanceUSD
+            : gameState.org.bankBalanceUSD - fac.costUSD,
+          facilityLevel: Math.max(gameState.org.facilityLevel, targetLevel),
+          facilityUnderConstruction: null,
+          reputation: Math.min(100, gameState.org.reputation + Math.round(fac.reputationBonus * 0.35)),
+        },
+      };
+      next.org.valuationUSD = calculateOrgValuationUSD(next);
+      commitState(next, `Built ${fac.name} instantly.`);
+      return;
+    }
+
     commitState(
       {
         ...gameState,
@@ -1050,14 +1195,38 @@ export default function App() {
     }
   };
 
+  /* -------------------- Developer Dashboard Handlers ---------------------- */
+  const handleApplyDevChange = (nextState: GameState, label: string) => {
+    const snaps = saveDevSnapshot(gameState, `Before: ${label}`);
+    setDevSnapshots(snaps);
+    commitState(nextState, `[DEV] ${label}`);
+  };
+
+  const handleSaveSnapshot = (label: string) => {
+    const snaps = saveDevSnapshot(gameState, label);
+    setDevSnapshots(snaps);
+    setFeedback(`Saved testing snapshot: ${label}`);
+  };
+
+  const handleRestoreSnapshot = (snapshotId: string) => {
+    const target = devSnapshots.find((s) => s.id === snapshotId);
+    if (!target) return;
+    const restored: GameState = {
+      ...target.state,
+      isSandbox: gameState.isSandbox,
+      saveSlotId: gameState.saveSlotId,
+    };
+    commitState(restored, `Restored snapshot: ${target.label}`);
+  };
+
   return (
-    <div className="min-h-screen bg-[#F6F7F9] dark:bg-[#0B0F17] text-slate-900 dark:text-slate-100 flex">
+    <div className="min-h-screen bg-[#F3F5F9] dark:bg-[#0B0E14] text-slate-900 dark:text-slate-100 flex">
       {/* Desktop Left Sidebar */}
-      <aside className="hidden lg:flex lg:flex-col lg:w-64 lg:fixed lg:inset-y-0 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 p-5 justify-between z-30">
+      <aside className="hidden lg:flex lg:flex-col lg:w-64 lg:fixed lg:inset-y-0 bg-white dark:bg-[#0F141F] border-r border-slate-200 dark:border-slate-800/90 p-5 justify-between z-30">
         <div className="space-y-6">
           <div className="px-2">
             <div className="font-display text-lg font-extrabold tracking-tight text-slate-900 dark:text-white">
-              Life Empire: Esports
+              Life Empire: <span className="text-blue-500">Esports</span>
             </div>
             <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
               {gameState.character.firstName} {gameState.character.lastName} · Age {gameState.character.age}
@@ -1073,10 +1242,10 @@ export default function App() {
                   key={item.id}
                   type="button"
                   onClick={() => setActiveTab(item.id)}
-                  className={`w-full min-h-[44px] px-3.5 py-2.5 rounded-xl flex items-center gap-3 text-sm font-semibold transition-colors whitespace-nowrap ${
+                  className={`w-full min-h-[44px] px-3.5 py-2.5 rounded-xl flex items-center gap-3 text-sm font-semibold transition-all whitespace-nowrap ${
                     active
-                      ? 'bg-blue-600 text-white'
-                      : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                      ? 'bg-gradient-to-r from-blue-600 to-violet-600 text-white shadow-md shadow-blue-600/20'
+                      : 'text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/70'
                   }`}
                 >
                   <Icon size={18} />
@@ -1096,28 +1265,36 @@ export default function App() {
           <button
             type="button"
             onClick={handleAdvanceWeek}
-            className="w-full min-h-[46px] px-4 py-2.5 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:bg-blue-600 hover:text-white text-sm font-display font-semibold flex items-center justify-center gap-2 transition-colors"
+            className="w-full min-h-[46px] px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-500 hover:to-violet-500 text-white text-sm font-display font-semibold flex items-center justify-center gap-2 transition-all shadow-lg shadow-blue-600/20"
           >
             Advance Week
             <ArrowRight size={15} />
           </button>
 
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-1.5">
             <button
               type="button"
               onClick={() => setShowSaveModal(true)}
-              className="min-h-[40px] px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-medium inline-flex items-center justify-center gap-1.5 hover:bg-slate-50 dark:hover:bg-slate-800"
+              className="min-h-[40px] px-2 py-2 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-medium inline-flex items-center justify-center gap-1 hover:bg-slate-50 dark:hover:bg-slate-800"
             >
-              <Save size={14} />
+              <Save size={13} />
               Saves
             </button>
             <button
               type="button"
               onClick={() => setDarkMode(!darkMode)}
-              className="min-h-[40px] px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-medium inline-flex items-center justify-center gap-1.5 hover:bg-slate-50 dark:hover:bg-slate-800"
+              className="min-h-[40px] px-2 py-2 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-medium inline-flex items-center justify-center gap-1 hover:bg-slate-50 dark:hover:bg-slate-800"
             >
-              {darkMode ? <Sun size={14} /> : <Moon size={14} />}
+              {darkMode ? <Sun size={13} /> : <Moon size={13} />}
               {darkMode ? 'Light' : 'Dark'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowSettingsModal(true)}
+              className="min-h-[40px] px-2 py-2 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-medium inline-flex items-center justify-center gap-1 hover:bg-slate-50 dark:hover:bg-slate-800"
+            >
+              <Settings size={13} />
+              Setup
             </button>
           </div>
         </div>
@@ -1125,27 +1302,28 @@ export default function App() {
 
       {/* Main Content Area */}
       <div className="flex-1 lg:pl-64 flex flex-col min-w-0">
-        {/* Compact Sticky Header (Mobile <= 52px, Desktop clean bar) */}
-        <header className="sticky top-0 z-20 h-[52px] bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-4 sm:px-6 flex items-center justify-between gap-4">
+        {/* Compact Sticky Header */}
+        <header className="sticky top-0 z-20 h-[52px] bg-white/90 dark:bg-[#0F141F]/90 backdrop-blur-md border-b border-slate-200 dark:border-slate-800/90 px-4 sm:px-6 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
             <span className="font-display font-bold text-sm sm:text-base text-slate-900 dark:text-white truncate">
               {NAV_ITEMS.find((n) => n.id === activeTab)?.label}
             </span>
-            <span className="text-xs font-mono text-slate-500 dark:text-slate-400 whitespace-nowrap">
+            <span className="text-xs font-mono text-blue-500 whitespace-nowrap">
               Yr {gameState.year} · Wk {gameState.week}
+              {(gameState.day ?? 1) > 1 ? ` · D${gameState.day}` : ''}
             </span>
           </div>
 
-          <div className="flex items-center gap-3 sm:gap-5 shrink-0">
+          <div className="flex items-center gap-2.5 sm:gap-4 shrink-0">
             <div className="text-xs font-mono tabular-nums whitespace-nowrap">
               <span className="text-slate-400 mr-1">EN</span>
-              <strong className={gameState.energy < 25 ? 'text-amber-600' : ''}>
+              <strong className={gameState.energy < 25 ? 'text-amber-500' : ''}>
                 {gameState.energy}/100
               </strong>
             </div>
             <div className="text-xs font-mono tabular-nums whitespace-nowrap hidden sm:block">
               <span className="text-slate-400 mr-1">Personal</span>
-              <strong className="text-emerald-700 dark:text-emerald-400">
+              <strong className="text-emerald-500">
                 {formatCurrency(
                   gameState.finances.cashUSD + gameState.finances.bankBalanceUSD,
                   gameState.character.countryId,
@@ -1156,7 +1334,7 @@ export default function App() {
             {gameState.org.founded && (
               <div className="text-xs font-mono tabular-nums whitespace-nowrap hidden md:block">
                 <span className="text-slate-400 mr-1">Org</span>
-                <strong>
+                <strong className="text-blue-400">
                   {formatCurrency(gameState.org.bankBalanceUSD, gameState.character.countryId, true)}
                 </strong>
               </div>
@@ -1165,28 +1343,77 @@ export default function App() {
             <div className="flex lg:hidden items-center gap-1.5">
               <button
                 type="button"
-                onClick={() => setDarkMode(!darkMode)}
-                aria-label="Toggle color theme"
-                className="min-h-[38px] min-w-[38px] flex items-center justify-center rounded-lg border border-slate-200 dark:border-slate-700"
-              >
-                {darkMode ? <Sun size={15} /> : <Moon size={15} />}
-              </button>
-              <button
-                type="button"
                 onClick={() => setShowSaveModal(true)}
                 aria-label="Open save slots"
                 className="min-h-[38px] min-w-[38px] flex items-center justify-center rounded-lg border border-slate-200 dark:border-slate-700"
               >
                 <Save size={15} />
               </button>
+              <button
+                type="button"
+                onClick={() => setShowSettingsModal(true)}
+                aria-label="Open settings"
+                className="min-h-[38px] min-w-[38px] flex items-center justify-center rounded-lg border border-slate-200 dark:border-slate-700"
+              >
+                <Settings size={15} />
+              </button>
             </div>
           </div>
         </header>
 
+        {/* Active Sandbox / Developer Mode Banner (Non-Sticky, In-Flow) */}
+        {(gameState.isSandbox || developerModeEnabled) && (
+          <div className="max-w-6xl w-full mx-auto px-4 sm:px-6 pt-4">
+            <div className="px-4 py-2.5 rounded-xl border border-purple-500/35 bg-gradient-to-r from-purple-600/15 via-blue-600/10 to-amber-500/10 flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div className="flex flex-wrap items-center gap-3">
+                {gameState.isSandbox && (
+                  <span className="inline-flex items-center gap-1.5 font-semibold text-purple-400">
+                    <FlaskConical size={14} />
+                    Sandbox Mode Active (Isolated Save)
+                  </span>
+                )}
+                {developerModeEnabled && (
+                  <span className="inline-flex items-center gap-1.5 font-semibold text-amber-400">
+                    <Terminal size={14} />
+                    Developer Mode Active
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                {developerModeEnabled && (
+                  <button
+                    type="button"
+                    onClick={() => setShowDevDashboard(true)}
+                    className="min-h-[34px] px-3 py-1 rounded-lg bg-amber-500 text-slate-950 hover:bg-amber-400 font-semibold whitespace-nowrap"
+                  >
+                    Developer Dashboard
+                  </button>
+                )}
+                {gameState.isSandbox && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const fallbackSlot = saves[0]?.slotId;
+                      if (fallbackSlot) {
+                        handleLoadSave(fallbackSlot);
+                      } else {
+                        setGameState(null);
+                      }
+                    }}
+                    className="min-h-[34px] px-3 py-1 rounded-lg border border-slate-300 dark:border-slate-700 font-semibold whitespace-nowrap"
+                  >
+                    Exit Sandbox
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Feedback Toast */}
         {feedback && (
           <div className="max-w-6xl w-full mx-auto px-4 sm:px-6 pt-4">
-            <div className="px-4 py-3 rounded-xl bg-slate-900 dark:bg-slate-800 text-white text-xs sm:text-sm font-medium flex items-center justify-between shadow-sm">
+            <div className="px-4 py-3 rounded-xl bg-slate-900 dark:bg-[#172033] border border-blue-500/30 text-white text-xs sm:text-sm font-medium flex items-center justify-between shadow-lg">
               <span>{feedback}</span>
               <button
                 type="button"
@@ -1244,6 +1471,18 @@ export default function App() {
               onNegotiatePlayer={handleNegotiatePlayer}
               onEnterTournament={handleEnterTournament}
               onLaunchMatchModal={(trn) => setActiveMatchTournament(trn)}
+              onChangeOrgStrategy={(orgType, orgStrategy) =>
+                commitState(
+                  devSetOrgTypeAndStrategy(gameState, orgType, orgStrategy),
+                  `Organization strategy updated: ${orgType} · ${orgStrategy}`
+                )
+              }
+              onCreatePaperTeam={(gameId) =>
+                commitState(
+                  devCreatePaperTeam(gameState, gameId, 'Professional'),
+                  `Paper Team created for ${getGameById(gameId).name}!`
+                )
+              }
             />
           )}
           {activeTab === 'business' && (
@@ -1276,10 +1515,10 @@ export default function App() {
         </main>
       </div>
 
-      {/* Mobile Bottom Tab Bar (60px <= 15% cap combined with 52px header) */}
+      {/* Mobile Bottom Tab Bar */}
       <nav
         aria-label="Mobile navigation"
-        className="lg:hidden fixed bottom-0 left-0 right-0 z-30 h-[60px] pb-safe bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 grid grid-cols-6 items-center"
+        className="lg:hidden fixed bottom-0 left-0 right-0 z-30 h-[60px] pb-safe bg-white/95 dark:bg-[#0F141F]/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 grid grid-cols-6 items-center"
       >
         {NAV_ITEMS.map((item) => {
           const Icon = item.icon;
@@ -1291,7 +1530,7 @@ export default function App() {
               onClick={() => setActiveTab(item.id)}
               className={`min-h-[44px] flex flex-col items-center justify-center gap-0.5 text-[10px] font-semibold transition-colors ${
                 active
-                  ? 'text-blue-600 dark:text-blue-400'
+                  ? 'text-blue-500'
                   : 'text-slate-500 dark:text-slate-400'
               }`}
             >
@@ -1326,7 +1565,7 @@ export default function App() {
           saves={saves}
           onSaveSlot={(slotId) => {
             saveGameToSlot(gameState, slotId);
-            setSaves(listSaveSlots());
+            refreshSlotSummaries();
             setFeedback(`Saved career to ${slotId.replace('_', ' ')}.`);
           }}
           onLoadSlot={handleLoadSave}
@@ -1342,6 +1581,44 @@ export default function App() {
             }
           }}
           onClose={() => setShowSaveModal(false)}
+        />
+      )}
+
+      {showSettingsModal && (
+        <SettingsModal
+          state={gameState}
+          darkMode={darkMode}
+          developerModeEnabled={developerModeEnabled}
+          sandboxSummary={sandboxSummary}
+          onToggleDarkMode={() => setDarkMode(!darkMode)}
+          onToggleDeveloperMode={handleToggleDeveloperMode}
+          onOpenDeveloperDashboard={() => setShowDevDashboard(true)}
+          onOpenSaveModal={() => setShowSaveModal(true)}
+          onStartSandbox={() => handleStartSandbox()}
+          onResumeSandbox={handleResumeSandbox}
+          onDeleteSandbox={handleDeleteSandbox}
+          onExitSandbox={() => {
+            const fallbackSlot = saves[0]?.slotId;
+            if (fallbackSlot) {
+              handleLoadSave(fallbackSlot);
+            } else {
+              setGameState(null);
+            }
+          }}
+          onClose={() => setShowSettingsModal(false)}
+        />
+      )}
+
+      {showDevDashboard && developerModeEnabled && (
+        <DeveloperDashboardModal
+          state={gameState}
+          snapshots={devSnapshots.filter(
+            (s) => Boolean(s.state?.isSandbox) === Boolean(gameState.isSandbox)
+          )}
+          onApplyDevChange={handleApplyDevChange}
+          onSaveSnapshot={handleSaveSnapshot}
+          onRestoreSnapshot={handleRestoreSnapshot}
+          onClose={() => setShowDevDashboard(false)}
         />
       )}
 

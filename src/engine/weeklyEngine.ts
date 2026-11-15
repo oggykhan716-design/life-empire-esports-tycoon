@@ -127,6 +127,7 @@ export function createNewGameState(
     unlockedAchievements: [],
     ending: null,
     activitiesThisWeek: [],
+    day: 1,
   };
 }
 
@@ -529,9 +530,25 @@ export function advanceWeek(state: GameState): GameState {
     const facMaintenance = Math.round(facCostBase * facDisc);
 
     orgExpenses = playerSalaries + staffSalaries + creatorSalaries + facMaintenance;
+
+    // Developer Mode custom monthly revenue/expense overrides (4 weeks = 1 month)
+    if (
+      state.devOverrides?.customMonthlyRevenueUSD !== undefined &&
+      state.devOverrides?.customMonthlyRevenueUSD !== null
+    ) {
+      orgRevenue = Math.max(0, Math.round(state.devOverrides.customMonthlyRevenueUSD / 4));
+    }
+    if (
+      state.devOverrides?.customMonthlyExpensesUSD !== undefined &&
+      state.devOverrides?.customMonthlyExpensesUSD !== null
+    ) {
+      orgExpenses = Math.max(0, Math.round(state.devOverrides.customMonthlyExpensesUSD / 4));
+    }
+
     org.bankBalanceUSD = org.bankBalanceUSD + orgRevenue - orgExpenses;
     org.lastWeekRevenueUSD = orgRevenue;
     org.lastWeekExpensesUSD = orgExpenses;
+    org.orgXp = Math.min(10000, (org.orgXp ?? 0) + 15 + org.divisions.length * 10);
 
     // Passive follower growth
     const followerGrowth =
@@ -686,6 +703,7 @@ export function advanceWeek(state: GameState): GameState {
     tournaments: updatedTournaments,
     worldNews: newWorldNews.slice(0, 25),
     activitiesThisWeek: [],
+    day: 1,
     lastWeeklyRecap: {
       week: state.week,
       year: state.year,

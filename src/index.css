@@ -25,3 +25,12 @@
 .pb-safe {
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
+
+/* Subtle Football Manager + Esports tactical panel surface helpers */
+.fm-panel {
+  @apply bg-white dark:bg-[#111723] border border-slate-200 dark:border-slate-800/90 rounded-2xl;
+}
+
+.fm-panel-elevated {
+  @apply bg-slate-50/90 dark:bg-gradient-to-br dark:from-[#151D2E] dark:to-[#0F1521] border border-slate-200 dark:border-slate-800 rounded-2xl;
+}

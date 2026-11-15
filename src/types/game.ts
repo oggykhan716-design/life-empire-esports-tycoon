@@ -260,6 +260,37 @@ export interface OrgRegistrationProgress {
   proposedIcon: string;
 }
 
+export type OrgType =
+  | 'Standard'
+  | 'Academy-Focused'
+  | 'Media & Content'
+  | 'Global Franchise'
+  | 'Championship Contender';
+
+export type OrgStrategy =
+  | 'Balanced'
+  | 'Talent Development'
+  | 'Hyper-Aggressive'
+  | 'Commercial Empire'
+  | 'International Expansion';
+
+export interface PaperTeamEntry {
+  id: string;
+  name: string;
+  gameId: string;
+  createdWeek: number;
+  active: boolean;
+}
+
+export interface DevOverrides {
+  unlockAllFeatures?: boolean;
+  unlockAllFacilities?: boolean;
+  unlockAllTournaments?: boolean;
+  instantUpgrades?: boolean;
+  customMonthlyRevenueUSD?: number | null;
+  customMonthlyExpensesUSD?: number | null;
+}
+
 export interface PlayerOrganization {
   founded: boolean;
   name: string;
@@ -294,6 +325,13 @@ export interface PlayerOrganization {
     week: number;
     prizeUSD: number;
   }[];
+  orgType?: OrgType;
+  orgStrategy?: OrgStrategy;
+  orgXp?: number;
+  paperTeamUnlocked?: boolean;
+  paperTeams?: PaperTeamEntry[];
+  internationalExpansionUnlocked?: boolean;
+  bonusRosterSlots?: number;
 }
 
 export type TournamentTier =
@@ -447,4 +485,7 @@ export interface GameState {
   unlockedAchievements: string[];
   ending: EndingSummary | null;
   activitiesThisWeek: string[];
+  day?: number;
+  isSandbox?: boolean;
+  devOverrides?: DevOverrides;
 }

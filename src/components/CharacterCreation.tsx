@@ -1,20 +1,43 @@
 import React, { useState } from 'react';
-import { ArrowRight, Globe2, MapPin, Play, RotateCcw, Trash2, User } from 'lucide-react';
+import {
+  ArrowRight,
+  FlaskConical,
+  Globe2,
+  MapPin,
+  Play,
+  RotateCcw,
+  Settings,
+  Trash2,
+  User,
+} from 'lucide-react';
 import { COUNTRIES, getCountryById } from '../data/countries';
+import { ORG_STRATEGIES, ORG_TYPES } from '../engine/devAndSandbox';
 import { formatCurrency } from '../engine/economy';
 import { SaveSlotSummary } from '../engine/storage';
+import tournamentArenaImg from '../assets/images/tournament_world_arena_1794780500054.jpg';
 import {
   CharacterProfile,
   FamilyBackground,
   Gender,
+  OrgStrategy,
+  OrgType,
   PersonalityType,
 } from '../types/game';
 
 interface CharacterCreationProps {
   existingSaves: SaveSlotSummary[];
+  sandboxSummary: SaveSlotSummary | null;
   onStartNewGame: (character: CharacterProfile, slotId: string) => void;
   onLoadSave: (slotId: string) => void;
   onDeleteSave: (slotId: string) => void;
+  onStartSandbox: (
+    character: CharacterProfile,
+    orgType: OrgType,
+    orgStrategy: OrgStrategy
+  ) => void;
+  onResumeSandbox: () => void;
+  onDeleteSandbox: () => void;
+  onOpenSettings: () => void;
 }
 
 const PERSONALITIES: { type: PersonalityType; bonus: string }[] = [
@@ -34,9 +57,14 @@ const FAMILY_BACKGROUNDS: { bg: FamilyBackground; note: string }[] = [
 
 export const CharacterCreation: React.FC<CharacterCreationProps> = ({
   existingSaves,
+  sandboxSummary,
   onStartNewGame,
   onLoadSave,
   onDeleteSave,
+  onStartSandbox,
+  onResumeSandbox,
+  onDeleteSandbox,
+  onOpenSettings,
 }) => {
   const [firstName, setFirstName] = useState('Alex');
   const [lastName, setLastName] = useState('Mercer');
@@ -46,6 +74,8 @@ export const CharacterCreation: React.FC<CharacterCreationProps> = ({
   const [personality, setPersonality] = useState<PersonalityType>('Analytical');
   const [familyBackground, setFamilyBackground] = useState<FamilyBackground>('Working Class');
   const [selectedSlot, setSelectedSlot] = useState('slot_1');
+  const [sandboxOrgType, setSandboxOrgType] = useState<OrgType>('Global Franchise');
+  const [sandboxOrgStrategy, setSandboxOrgStrategy] = useState<OrgStrategy>('International Expansion');
   const [imageFailed, setImageFailed] = useState(false);
 
   const selectedCountry = getCountryById(countryId);
@@ -121,72 +151,84 @@ export const CharacterCreation: React.FC<CharacterCreationProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-[#F6F7F9] dark:bg-[#0B0F17] text-slate-900 dark:text-slate-100 py-6 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-[#F3F5F9] dark:bg-[#0B0E14] text-slate-900 dark:text-slate-100 py-6 px-4 sm:px-6 lg:px-8">
       <div className="max-w-6xl mx-auto space-y-8">
-        {/* Editorial Hero Header */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden">
+        {/* Hero Banner */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-0 items-stretch bg-white dark:bg-gradient-to-br dark:from-[#121826] dark:to-[#0E131D] border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-xl shadow-black/15">
           <div className="lg:col-span-6 p-6 sm:p-8 flex flex-col justify-between gap-6">
             <div className="space-y-3">
-              <div className="flex items-center gap-2 text-xs font-medium text-slate-500 dark:text-slate-400">
-                <span>Text-Based Life Simulation</span>
-                <span aria-hidden="true">·</span>
-                <span>Career RPG</span>
-                <span aria-hidden="true">·</span>
-                <span>Esports Tycoon</span>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 text-xs font-medium text-blue-600 dark:text-blue-400">
+                  <span>Career RPG</span>
+                  <span aria-hidden="true">·</span>
+                  <span>Club Management</span>
+                  <span aria-hidden="true">·</span>
+                  <span>Esports Tycoon</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={onOpenSettings}
+                  aria-label="Open Settings"
+                  className="min-h-[38px] px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-medium inline-flex items-center gap-1.5 hover:bg-slate-50 dark:hover:bg-slate-800"
+                >
+                  <Settings size={14} />
+                  Settings
+                </button>
               </div>
               <h1 className="font-display text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-900 dark:text-white text-balance">
                 Life Empire: Esports
               </h1>
               <p className="text-sm sm:text-base text-slate-600 dark:text-slate-300 leading-relaxed max-w-xl">
-                Begin at 18 with {formatCurrency(100, countryId)}, no connections, and no organization.
-                Work ordinary shifts, master weekly energy, save capital, register your club, sign players,
-                and conquer the global esports circuit.
+                Begin at 18 with {formatCurrency(100, countryId)} in your pocket and zero industry backing.
+                Grind local shifts, manage weekly energy, incorporate your own esports club, sign elite rosters,
+                and battle rival giants on the World Championship stage.
               </p>
             </div>
 
-            <div className="grid grid-cols-3 gap-4 pt-4 border-t border-slate-100 dark:border-slate-800">
+            <div className="grid grid-cols-3 gap-4 pt-4 border-t border-slate-100 dark:border-slate-800/80">
               <div>
                 <div className="text-xs text-slate-500 dark:text-slate-400">Starting Cash</div>
-                <div className="font-mono text-lg font-semibold tabular-nums text-slate-900 dark:text-white">
+                <div className="font-mono text-lg font-bold tabular-nums text-blue-600 dark:text-blue-400">
                   {formatCurrency(100, countryId)}
                 </div>
               </div>
               <div>
                 <div className="text-xs text-slate-500 dark:text-slate-400">Weekly Energy</div>
-                <div className="font-mono text-lg font-semibold tabular-nums text-slate-900 dark:text-white">
+                <div className="font-mono text-lg font-bold tabular-nums text-slate-900 dark:text-white">
                   100 / 100
                 </div>
               </div>
               <div>
-                <div className="text-xs text-slate-500 dark:text-slate-400">Esports Titles</div>
-                <div className="font-mono text-lg font-semibold tabular-nums text-slate-900 dark:text-white">
-                  11 Circuits
+                <div className="text-xs text-slate-500 dark:text-slate-400">Global Circuits</div>
+                <div className="font-mono text-lg font-bold tabular-nums text-purple-600 dark:text-purple-400">
+                  11 Titles
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="lg:col-span-6 relative min-h-[220px] lg:min-h-full bg-slate-900">
+          <div className="lg:col-span-6 relative min-h-[240px] lg:min-h-full bg-[#0E131D]">
             {!imageFailed ? (
               <img
-                src="/src/assets/images/title_esports_studio_1794777596198.jpg"
-                alt="Sunlit apartment desk overlooking city skyline and distant esports arena"
+                src={tournamentArenaImg}
+                alt="Packed international esports championship arena stage"
                 referrerPolicy="no-referrer"
                 onError={() => setImageFailed(true)}
                 className="w-full h-full object-cover"
               />
             ) : (
-              <div className="w-full h-full flex flex-col items-center justify-center p-8 bg-gradient-to-br from-slate-800 to-slate-950 text-slate-300">
+              <div className="w-full h-full flex flex-col items-center justify-center p-8 text-slate-300">
                 <Globe2 size={36} className="mb-2 opacity-70" />
                 <span className="font-display font-semibold text-base">From Nothing to a Global Esports Empire</span>
               </div>
             )}
+            <div className="absolute inset-0 bg-gradient-to-t from-[#0B0E14]/85 via-transparent to-transparent pointer-events-none" />
           </div>
         </div>
 
         {/* Existing Save Slots */}
         {existingSaves.length > 0 && (
-          <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6">
+          <section className="fm-panel p-6">
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h2 className="font-display text-lg font-bold text-slate-900 dark:text-white">
@@ -201,7 +243,7 @@ export const CharacterCreation: React.FC<CharacterCreationProps> = ({
               {existingSaves.map((save) => (
                 <div
                   key={save.slotId}
-                  className="flex flex-col justify-between p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-800/40"
+                  className="flex flex-col justify-between p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#0D121C]"
                 >
                   <div className="space-y-1">
                     <div className="flex items-center justify-between">
@@ -215,7 +257,7 @@ export const CharacterCreation: React.FC<CharacterCreationProps> = ({
                     <div className="text-xs text-slate-600 dark:text-slate-300">
                       {save.orgName ? `CEO of ${save.orgName}` : 'Independent · Working Early Career'}
                     </div>
-                    <div className="font-mono text-sm font-semibold text-emerald-700 dark:text-emerald-400 tabular-nums pt-1">
+                    <div className="font-mono text-sm font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums pt-1">
                       {formatCurrency(save.cashUSD, save.countryId)}
                     </div>
                   </div>
@@ -223,7 +265,7 @@ export const CharacterCreation: React.FC<CharacterCreationProps> = ({
                     <button
                       type="button"
                       onClick={() => onLoadSave(save.slotId)}
-                      className="flex-1 min-h-[44px] inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors whitespace-nowrap"
+                      className="flex-1 min-h-[44px] inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-500 hover:to-violet-500 text-white text-sm font-medium transition-colors whitespace-nowrap"
                     >
                       <Play size={15} />
                       Resume
@@ -232,7 +274,7 @@ export const CharacterCreation: React.FC<CharacterCreationProps> = ({
                       type="button"
                       onClick={() => onDeleteSave(save.slotId)}
                       aria-label={`Delete save ${save.characterName}`}
-                      className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-red-600 hover:border-red-300 transition-colors"
+                      className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-red-500 hover:border-red-500/40 transition-colors"
                     >
                       <Trash2 size={16} />
                     </button>
@@ -243,16 +285,117 @@ export const CharacterCreation: React.FC<CharacterCreationProps> = ({
           </section>
         )}
 
+        {/* Sandbox Mode Isolated Launcher */}
+        <section className="fm-panel p-6 border-purple-500/30">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+            <div className="space-y-1.5 max-w-2xl">
+              <div className="text-xs font-semibold text-purple-500 flex items-center gap-1.5">
+                <FlaskConical size={14} />
+                Sandbox Mode · Isolated Save Slot
+              </div>
+              <h2 className="font-display text-lg font-bold text-slate-900 dark:text-white">
+                Open Sandbox &amp; Strategy Testing Lab
+              </h2>
+              <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                Start immediately with unlimited capital, all 9 facilities, Paper Teams, full player recruitment, international expansion, and every tournament tier unlocked. Normal career slots are never affected.
+              </p>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 shrink-0">
+              <select
+                aria-label="Sandbox Organization Type"
+                value={sandboxOrgType}
+                onChange={(e) => setSandboxOrgType(e.target.value as OrgType)}
+                className="min-h-[42px] px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#0B0E14] text-xs font-medium"
+              >
+                {ORG_TYPES.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.id}
+                  </option>
+                ))}
+              </select>
+              <select
+                aria-label="Sandbox Organization Strategy"
+                value={sandboxOrgStrategy}
+                onChange={(e) => setSandboxOrgStrategy(e.target.value as OrgStrategy)}
+                className="min-h-[42px] px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#0B0E14] text-xs font-medium"
+              >
+                {ORG_STRATEGIES.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.id}
+                  </option>
+                ))}
+              </select>
+
+              {sandboxSummary && (
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={onResumeSandbox}
+                    className="min-h-[42px] px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold whitespace-nowrap"
+                  >
+                    Resume Sandbox (Wk {sandboxSummary.week})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onDeleteSandbox}
+                    aria-label="Delete Sandbox Save"
+                    className="min-h-[42px] min-w-[42px] flex items-center justify-center rounded-xl border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-red-500"
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={() =>
+                  onStartSandbox(
+                    {
+                      firstName: firstName.trim() || 'Alex',
+                      lastName: lastName.trim() || 'Mercer',
+                      age: 18,
+                      gender,
+                      countryId,
+                      city,
+                      education: 'MBA',
+                      personality,
+                      familyBackground,
+                      skills: {
+                        workEthic: 90,
+                        businessAcumen: 92,
+                        esportsKnowledge: 95,
+                        negotiation: 90,
+                        leadership: 92,
+                        marketing: 90,
+                      },
+                      reputation: 85,
+                      connections: 60,
+                      health: 100,
+                      stress: 10,
+                    },
+                    sandboxOrgType,
+                    sandboxOrgStrategy
+                  )
+                }
+                className="min-h-[42px] px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white text-xs font-semibold whitespace-nowrap"
+              >
+                {sandboxSummary ? 'New Sandbox' : 'Launch Sandbox Mode'}
+              </button>
+            </div>
+          </div>
+        </section>
+
         {/* New Career Character Creator */}
         <form
           onSubmit={handleSubmit}
-          className="grid grid-cols-1 lg:grid-cols-12 gap-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 sm:p-8"
+          className="grid grid-cols-1 lg:grid-cols-12 gap-6 fm-panel p-6 sm:p-8"
         >
           <div className="lg:col-span-7 space-y-6">
             <div>
               <h2 className="font-display text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <User size={20} className="text-blue-600" />
-                Create Your Character
+                <User size={20} className="text-blue-500" />
+                Manager Profile Setup
               </h2>
               <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
                 Every playthrough adapts wages, living costs, currency, and licensing requirements to your chosen nation.
@@ -268,7 +411,7 @@ export const CharacterCreation: React.FC<CharacterCreationProps> = ({
                   maxLength={24}
                   value={firstName}
                   onChange={(e) => setFirstName(e.target.value)}
-                  className="w-full min-h-[44px] px-3.5 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
+                  className="w-full min-h-[44px] px-3.5 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#0B0E14] text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
                 />
               </label>
               <label className="block space-y-1.5">
@@ -279,7 +422,7 @@ export const CharacterCreation: React.FC<CharacterCreationProps> = ({
                   maxLength={24}
                   value={lastName}
                   onChange={(e) => setLastName(e.target.value)}
-                  className="w-full min-h-[44px] px-3.5 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
+                  className="w-full min-h-[44px] px-3.5 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#0B0E14] text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
                 />
               </label>
             </div>
@@ -287,7 +430,7 @@ export const CharacterCreation: React.FC<CharacterCreationProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div className="space-y-1.5">
                 <span className="text-xs font-medium text-slate-700 dark:text-slate-300">Starting Age</span>
-                <div className="min-h-[44px] px-3.5 py-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 text-sm font-mono flex items-center text-slate-600 dark:text-slate-300">
+                <div className="min-h-[44px] px-3.5 py-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#0B0E14] text-sm font-mono flex items-center text-slate-600 dark:text-slate-300">
                   18 years old
                 </div>
               </div>
@@ -296,7 +439,7 @@ export const CharacterCreation: React.FC<CharacterCreationProps> = ({
                 <select
                   value={gender}
                   onChange={(e) => setGender(e.target.value as Gender)}
-                  className="w-full min-h-[44px] px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
+                  className="w-full min-h-[44px] px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#0B0E14] text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
                 >
                   <option value="Male">Male</option>
                   <option value="Female">Female</option>
@@ -305,7 +448,7 @@ export const CharacterCreation: React.FC<CharacterCreationProps> = ({
               </label>
               <div className="space-y-1.5">
                 <span className="text-xs font-medium text-slate-700 dark:text-slate-300">Education</span>
-                <div className="min-h-[44px] px-3.5 py-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 text-sm flex items-center text-slate-600 dark:text-slate-300">
+                <div className="min-h-[44px] px-3.5 py-2 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#0B0E14] text-sm flex items-center text-slate-600 dark:text-slate-300">
                   High School
                 </div>
               </div>
@@ -317,7 +460,7 @@ export const CharacterCreation: React.FC<CharacterCreationProps> = ({
                 <select
                   value={countryId}
                   onChange={(e) => handleCountryChange(e.target.value)}
-                  className="w-full min-h-[44px] px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
+                  className="w-full min-h-[44px] px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#0B0E14] text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
                 >
                   {COUNTRIES.map((c) => (
                     <option key={c.id} value={c.id}>
@@ -331,7 +474,7 @@ export const CharacterCreation: React.FC<CharacterCreationProps> = ({
                 <select
                   value={city}
                   onChange={(e) => setCity(e.target.value)}
-                  className="w-full min-h-[44px] px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-950 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
+                  className="w-full min-h-[44px] px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#0B0E14] text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
                 >
                   {selectedCountry.cities.map((cName) => (
                     <option key={cName} value={cName}>
@@ -352,7 +495,7 @@ export const CharacterCreation: React.FC<CharacterCreationProps> = ({
                     onClick={() => setPersonality(p.type)}
                     className={`min-h-[48px] text-left p-3 rounded-xl border transition-colors ${
                       personality === p.type
-                        ? 'border-blue-600 bg-blue-50/70 dark:bg-blue-950/40 text-slate-900 dark:text-white'
+                        ? 'border-blue-500 bg-blue-600/10 text-slate-900 dark:text-white'
                         : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
                     }`}
                   >
@@ -373,7 +516,7 @@ export const CharacterCreation: React.FC<CharacterCreationProps> = ({
                     onClick={() => setFamilyBackground(fb.bg)}
                     className={`min-h-[48px] text-left p-3 rounded-xl border transition-colors ${
                       familyBackground === fb.bg
-                        ? 'border-blue-600 bg-blue-50/70 dark:bg-blue-950/40 text-slate-900 dark:text-white'
+                        ? 'border-purple-500 bg-purple-600/10 text-slate-900 dark:text-white'
                         : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
                     }`}
                   >
@@ -386,10 +529,10 @@ export const CharacterCreation: React.FC<CharacterCreationProps> = ({
           </div>
 
           {/* Right Column: Country Economy Briefing & Launch */}
-          <div className="lg:col-span-5 flex flex-col justify-between space-y-6 lg:border-l lg:border-slate-100 lg:dark:border-slate-800 lg:pl-6">
+          <div className="lg:col-span-5 flex flex-col justify-between space-y-6 lg:border-l lg:border-slate-200 lg:dark:border-slate-800 lg:pl-6">
             <div className="space-y-5">
               <div className="space-y-1">
-                <div className="flex items-center gap-2 text-xs font-medium text-blue-600 dark:text-blue-400">
+                <div className="flex items-center gap-2 text-xs font-medium text-blue-500">
                   <MapPin size={14} />
                   <span>{selectedCountry.region}</span>
                 </div>
@@ -426,8 +569,8 @@ export const CharacterCreation: React.FC<CharacterCreationProps> = ({
                 </div>
               </div>
 
-              <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 text-xs text-slate-600 dark:text-slate-300">
-                <span className="font-semibold text-slate-900 dark:text-white">Regional Advantage: </span>
+              <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-[#0D121C] border border-slate-200 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-300">
+                <span className="font-semibold text-blue-500">Regional Advantage: </span>
                 {selectedCountry.localBonus}
               </div>
 
@@ -441,7 +584,7 @@ export const CharacterCreation: React.FC<CharacterCreationProps> = ({
                       onClick={() => setSelectedSlot(slot)}
                       className={`min-h-[44px] rounded-lg border text-xs font-medium transition-colors ${
                         selectedSlot === slot
-                          ? 'border-blue-600 bg-blue-600 text-white'
+                          ? 'border-blue-500 bg-blue-600 text-white'
                           : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
                       }`}
                     >
@@ -455,7 +598,7 @@ export const CharacterCreation: React.FC<CharacterCreationProps> = ({
             <div className="space-y-3 pt-4 border-t border-slate-100 dark:border-slate-800">
               <button
                 type="submit"
-                className="w-full min-h-[48px] px-5 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-display font-semibold text-sm flex items-center justify-center gap-2 transition-colors active:scale-[0.99]"
+                className="w-full min-h-[48px] px-5 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-violet-600 hover:from-blue-500 hover:to-violet-500 text-white font-display font-semibold text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.99] shadow-lg shadow-blue-600/20"
               >
                 Start Career
                 <ArrowRight size={17} />

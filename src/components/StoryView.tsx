@@ -1,5 +1,5 @@
 import React from 'react';
-import { Award, BookText, CheckCircle2, Save, Sparkles } from 'lucide-react';
+import { Award, BookText, CheckCircle2, Save } from 'lucide-react';
 import { ACHIEVEMENTS } from '../data/eventsAndAchievements';
 import { GameState } from '../types/game';
 
@@ -18,12 +18,11 @@ export const StoryView: React.FC<StoryViewProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Pending Decision Banner */}
       {state.pendingEvent && (
-        <section className="bg-white dark:bg-slate-900 border border-blue-300 dark:border-blue-800 rounded-2xl p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <section className="fm-panel-elevated border-blue-500/50 p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="space-y-1">
-            <div className="text-xs font-semibold text-blue-600 dark:text-blue-400">
-              Active Decision · {state.pendingEvent.category}
+            <div className="text-xs font-semibold text-blue-400">
+              Pending Decision · {state.pendingEvent.category}
             </div>
             <h2 className="font-display text-xl font-bold text-slate-900 dark:text-white">
               {state.pendingEvent.title}
@@ -35,7 +34,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
           <button
             type="button"
             onClick={onOpenEventModal}
-            className="min-h-[44px] px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold whitespace-nowrap shrink-0"
+            className="min-h-[44px] px-5 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-violet-600 text-white text-sm font-semibold whitespace-nowrap shrink-0"
           >
             Make Decision
           </button>
@@ -43,22 +42,21 @@ export const StoryView: React.FC<StoryViewProps> = ({
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Career Chronicle */}
-        <section className="lg:col-span-7 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 space-y-4">
+        <section className="lg:col-span-7 fm-panel p-6 space-y-4">
           <div className="flex items-center justify-between">
             <div>
               <h3 className="font-display text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <BookText size={18} className="text-blue-600" />
-                Career Chronicle &amp; Historical Choices
+                <BookText size={18} className="text-blue-500" />
+                Career Chronicle &amp; Decisions
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Permanent timeline of your decisions, victories, and milestones.
+                Permanent timeline of your decisions, signings, and titles.
               </p>
             </div>
             <button
               type="button"
               onClick={onOpenSaveModal}
-              className="min-h-[40px] px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-blue-600 text-xs font-semibold inline-flex items-center gap-1.5"
+              className="min-h-[40px] px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 hover:border-blue-500 text-xs font-semibold inline-flex items-center gap-1.5"
             >
               <Save size={14} />
               Save / Load
@@ -69,7 +67,7 @@ export const StoryView: React.FC<StoryViewProps> = ({
             {state.history.map((entry) => (
               <div key={entry.id} className="py-3.5 space-y-1">
                 <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-                  <span className="font-mono">Yr {entry.year} · Wk {entry.week}</span>
+                  <span className="font-mono text-blue-500">Yr {entry.year} · Wk {entry.week}</span>
                   <span aria-hidden="true">·</span>
                   <span>{entry.category}</span>
                 </div>
@@ -84,15 +82,14 @@ export const StoryView: React.FC<StoryViewProps> = ({
           </div>
         </section>
 
-        {/* Achievements */}
-        <section className="lg:col-span-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 space-y-4">
+        <section className="lg:col-span-5 fm-panel p-6 space-y-4">
           <div>
             <h3 className="font-display text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-              <Award size={18} className="text-blue-600" />
-              Achievements ({state.unlockedAchievements.length}/{ACHIEVEMENTS.length})
+              <Award size={18} className="text-purple-500" />
+              Trophy &amp; Milestone Cabinet ({state.unlockedAchievements.length}/{ACHIEVEMENTS.length})
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Long-term personal wealth and championship milestones.
+              Personal wealth and global esports championship milestones.
             </p>
           </div>
 
@@ -104,13 +101,13 @@ export const StoryView: React.FC<StoryViewProps> = ({
                   key={ach.id}
                   className={`p-3.5 rounded-xl border ${
                     unlocked
-                      ? 'border-emerald-200 dark:border-emerald-900 bg-emerald-50/50 dark:bg-emerald-950/20'
-                      : 'border-slate-100 dark:border-slate-800 opacity-70'
+                      ? 'border-emerald-500/40 bg-emerald-500/10'
+                      : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-[#0D121C] opacity-70'
                   }`}
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <div className="text-xs text-slate-500">{ach.category}</div>
-                    {unlocked && <CheckCircle2 size={15} className="text-emerald-600" />}
+                    <div className="text-xs text-blue-500 font-medium">{ach.category}</div>
+                    {unlocked && <CheckCircle2 size={15} className="text-emerald-500" />}
                   </div>
                   <div className="font-display font-semibold text-sm text-slate-900 dark:text-white mt-0.5">
                     {ach.title}
