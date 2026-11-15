@@ -1,0 +1,6 @@
+{
+  "name": "Life Empire: Esports",
+  "description": "Text-based life simulation, career RPG, and esports organization management tycoon. Start with $100, work ordinary jobs, found your esports org, recruit pros, and build a global empire.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
