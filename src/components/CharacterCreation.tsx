@@ -11,10 +11,13 @@ import {
   User,
 } from 'lucide-react';
 import { COUNTRIES, getCountryById } from '../data/countries';
+import { ESPORTS_TITLES } from '../data/esportsTitles';
+import { PlayerCareerSetup } from '../engine/career/playerCareerEngine';
 import { ORG_STRATEGIES, ORG_TYPES } from '../engine/devAndSandbox';
 import { formatCurrency } from '../engine/economy';
 import { SaveSlotSummary } from '../engine/storage';
 import tournamentArenaImg from '../assets/images/tournament_world_arena_1794780500054.jpg';
+import { CareerType, PlayerStartingBackground } from '../types/career';
 import {
   CharacterProfile,
   FamilyBackground,
@@ -28,6 +31,11 @@ interface CharacterCreationProps {
   existingSaves: SaveSlotSummary[];
   sandboxSummary: SaveSlotSummary | null;
   onStartNewGame: (character: CharacterProfile, slotId: string) => void;
+  onStartPlayerCareer: (
+    character: CharacterProfile,
+    setup: PlayerCareerSetup,
+    slotId: string
+  ) => void;
   onLoadSave: (slotId: string) => void;
   onDeleteSave: (slotId: string) => void;
   onStartSandbox: (
@@ -55,10 +63,20 @@ const FAMILY_BACKGROUNDS: { bg: FamilyBackground; note: string }[] = [
   { bg: 'Immigrant Hustle', note: 'Adaptable mindset (+4 Business Acumen, +3 Connections)' },
 ];
 
+const PLAYER_BACKGROUNDS: { bg: PlayerStartingBackground; note: string }[] = [
+  { bg: 'Ranked Prodigy', note: '52 Skill · High solo-queue clout (+14 Popularity)' },
+  { bg: 'LAN Grinder', note: 'Stage composure (+54 Pressure, +24 Experience)' },
+  { bg: 'College Captain', note: '62 Teamwork · +16 Reputation · Reliable comms' },
+  { bg: 'Academy Hopeful', note: '86 Potential ceiling · Coachable talent' },
+];
+
+const PRO_ROLES = ['IGL / Captain', 'Entry / Carry', 'Flex / Support', 'Sniper / Mid'];
+
 export const CharacterCreation: React.FC<CharacterCreationProps> = ({
   existingSaves,
   sandboxSummary,
   onStartNewGame,
+  onStartPlayerCareer,
   onLoadSave,
   onDeleteSave,
   onStartSandbox,
@@ -66,8 +84,14 @@ export const CharacterCreation: React.FC<CharacterCreationProps> = ({
   onDeleteSandbox,
   onOpenSettings,
 }) => {
+  const [careerType, setCareerType] = useState<CareerType>('OWNER');
   const [firstName, setFirstName] = useState('Alex');
   const [lastName, setLastName] = useState('Mercer');
+  const [ign, setIgn] = useState('MercerGG');
+  const [primaryGameId, setPrimaryGameId] = useState(ESPORTS_TITLES[0].id);
+  const [preferredRole, setPreferredRole] = useState(PRO_ROLES[1]);
+  const [playerBackground, setPlayerBackground] =
+    useState<PlayerStartingBackground>('Ranked Prodigy');
   const [gender, setGender] = useState<Gender>('Male');
   const [countryId, setCountryId] = useState('usa');
   const [city, setCity] = useState('Los Angeles');
@@ -146,6 +170,21 @@ export const CharacterCreation: React.FC<CharacterCreationProps> = ({
       health: 100,
       stress: 10,
     };
+
+    if (careerType === 'PLAYER') {
+      onStartPlayerCareer(
+        character,
+        {
+          ign: ign.trim() || `${character.firstName}GG`,
+          nationality: selectedCountry.name,
+          primaryGameId,
+          preferredRole,
+          startingBackground: playerBackground,
+        },
+        selectedSlot
+      );
+      return;
+    }
 
     onStartNewGame(character, selectedSlot);
   };
@@ -395,12 +434,124 @@ export const CharacterCreation: React.FC<CharacterCreationProps> = ({
             <div>
               <h2 className="font-display text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
                 <User size={20} className="text-blue-500" />
-                Manager Profile Setup
+                Start Your Journey
               </h2>
               <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                Every playthrough adapts wages, living costs, currency, and licensing requirements to your chosen nation.
+                Choose between building an esports organisation from scratch or grinding to glory as an active pro player.
               </p>
             </div>
+
+            {/* Dual Career Path Choice */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setCareerType('OWNER')}
+                className={`min-h-[82px] text-left p-4 rounded-xl border transition-all ${
+                  careerType === 'OWNER'
+                    ? 'border-blue-500 bg-blue-600/15 shadow-sm shadow-blue-600/20'
+                    : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+                }`}
+              >
+                <div className="font-display font-bold text-sm text-slate-900 dark:text-white">
+                  Organisation Owner
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                  Work local shifts, save seed capital, found your club, sign players, and conquer global leagues.
+                </p>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setCareerType('PLAYER')}
+                className={`min-h-[82px] text-left p-4 rounded-xl border transition-all ${
+                  careerType === 'PLAYER'
+                    ? 'border-purple-500 bg-purple-600/15 shadow-sm shadow-purple-600/20'
+                    : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+                }`}
+              >
+                <div className="font-display font-bold text-sm text-slate-900 dark:text-white">
+                  Professional Esports Player
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                  Rise from Amateur to Legend, attend tryouts, sign team contracts, build fans, and retire into ownership.
+                </p>
+              </button>
+            </div>
+
+            {careerType === 'PLAYER' && (
+              <div className="p-4 rounded-xl border border-purple-500/30 bg-purple-600/5 space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <label className="block space-y-1.5">
+                    <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                      Player IGN / Handle
+                    </span>
+                    <input
+                      type="text"
+                      required
+                      maxLength={20}
+                      value={ign}
+                      onChange={(e) => setIgn(e.target.value)}
+                      className="w-full min-h-[44px] px-3.5 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#0B0E14] text-sm font-mono focus:outline-none focus:ring-2 focus:ring-purple-600"
+                    />
+                  </label>
+                  <label className="block space-y-1.5">
+                    <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                      Main Esports Title
+                    </span>
+                    <select
+                      value={primaryGameId}
+                      onChange={(e) => setPrimaryGameId(e.target.value)}
+                      className="w-full min-h-[44px] px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#0B0E14] text-sm focus:outline-none focus:ring-2 focus:ring-purple-600"
+                    >
+                      {ESPORTS_TITLES.map((g) => (
+                        <option key={g.id} value={g.id}>
+                          {g.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="block space-y-1.5">
+                    <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                      Preferred Role
+                    </span>
+                    <select
+                      value={preferredRole}
+                      onChange={(e) => setPreferredRole(e.target.value)}
+                      className="w-full min-h-[44px] px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#0B0E14] text-sm focus:outline-none focus:ring-2 focus:ring-purple-600"
+                    >
+                      {PRO_ROLES.map((r) => (
+                        <option key={r} value={r}>
+                          {r}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+
+                <div className="space-y-2">
+                  <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                    Competitive Origin
+                  </span>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    {PLAYER_BACKGROUNDS.map((pb) => (
+                      <button
+                        key={pb.bg}
+                        type="button"
+                        onClick={() => setPlayerBackground(pb.bg)}
+                        className={`min-h-[48px] text-left p-3 rounded-xl border transition-colors ${
+                          playerBackground === pb.bg
+                            ? 'border-purple-500 bg-purple-600/15 text-slate-900 dark:text-white'
+                            : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+                        }`}
+                      >
+                        <div className="text-sm font-semibold">{pb.bg}</div>
+                        <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{pb.note}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <label className="block space-y-1.5">

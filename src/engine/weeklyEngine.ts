@@ -1,6 +1,7 @@
 import { getCountryById } from '../data/countries';
 import { ACHIEVEMENTS, STORY_EVENT_TEMPLATES } from '../data/eventsAndAchievements';
 import { FACILITY_TIERS, STAFF_ROLES } from '../data/facilitiesAndStaff';
+import { FICTIONAL_STARTING_TALENTS } from '../data/fictionalPlayers';
 import { JOB_LEVEL_MULTIPLIER, JOBS } from '../data/jobs';
 import { INITIAL_RIVALS } from '../data/rivals';
 import {
@@ -10,11 +11,16 @@ import {
   RivalOrganization,
   SponsorDeal,
 } from '../types/game';
+import { tickPlayerCareerWeekly } from './career/playerCareerEngine';
 import {
   calculateOrgValuationUSD,
   calculatePersonalNetWorthUSD,
   calculateWeeklyPersonalExpensesUSD,
 } from './economy';
+import { tickWeeklyStockMarket } from './economy/stocksEngine';
+import { createInitialPhoneState, createWorldEvent, ensurePhoneState } from './events/eventBus';
+import { processWorldEvents } from './events/eventProcessor';
+import { createSeededRng, hashString, WorldEvent } from './events/types';
 import { generateInitialMarketPool, generatePlayer } from './playerGenerator';
 import { generateInitialTournaments, generateTournamentsForGame } from './tournamentEngine';
 
@@ -23,14 +29,22 @@ export function createNewGameState(
   saveSlotId = 'slot_1'
 ): GameState {
   const rivals = INITIAL_RIVALS.map((r) => ({ ...r }));
-  const marketPlayers = generateInitialMarketPool();
+  const baseMarket = generateInitialMarketPool();
+  const knownIds = new Set(baseMarket.map((p) => p.id));
+  const marketPlayers = [
+    ...FICTIONAL_STARTING_TALENTS.filter((p) => !knownIds.has(p.id)),
+    ...baseMarket,
+  ];
   const tournaments = generateInitialTournaments(rivals);
 
   const country = getCountryById(character.countryId);
 
-  return {
-    version: '1.0.0',
+  const initialState: GameState = {
+    version: '2.0.0',
+    schemaVersion: 2,
     saveSlotId,
+    careerType: 'OWNER',
+    randomSeed: Math.floor(100000 + Math.random() * 899999),
     week: 1,
     year: 1,
     energy: 100,
@@ -128,7 +142,12 @@ export function createNewGameState(
     ending: null,
     activitiesThisWeek: [],
     day: 1,
+    eventHistory: [],
+    processedEventIds: [],
   };
+
+  initialState.phoneState = createInitialPhoneState(initialState);
+  return initialState;
 }
 
 export function getEnergyCosts(state: GameState) {
@@ -368,6 +387,7 @@ export function advanceWeek(state: GameState): GameState {
   const nextYear = Math.floor((nextWeek - 1) / 52) + 1;
   const highlights: string[] = [];
   const country = getCountryById(state.character.countryId);
+  const weeklyEvents: WorldEvent[] = [];
 
   let cash = state.finances.cashUSD;
   let bank = state.finances.bankBalanceUSD;
@@ -414,7 +434,7 @@ export function advanceWeek(state: GameState): GameState {
   });
   if (investmentIncome > 0) {
     bank += investmentIncome;
-    highlights.push(`Investments generated ${investmentIncome > 0 ? `$${investmentIncome}` : ''} in weekly dividends.`);
+    highlights.push(`Investments generated $${investmentIncome} in weekly dividends.`);
   }
 
   // 3. Employment Progression
@@ -460,6 +480,24 @@ export function advanceWeek(state: GameState): GameState {
       };
       org.valuationUSD = 32500;
       highlights.push(`Official approval received! ${org.name} (${org.tag}) is now a licensed esports organization.`);
+      weeklyEvents.push(
+        createWorldEvent(
+          { ...state, week: nextWeek, day: 1 },
+          {
+            id: `wevt_org_founded_${nextWeek}`,
+            type: 'ORGANISATION_CREATED',
+            actorId: 'player_org',
+            title: `${org.name} Receive Pro License`,
+            description: `${org.name} [${org.tag}] officially enters the global esports circuit.`,
+            importance: 'HIGH',
+            payload: {
+              orgName: org.name,
+              teamName: org.name,
+              notifyUser: true,
+            },
+          }
+        )
+      );
     } else {
       highlights.push(`Organization license under review (${registration.approvalWeeksRemaining} week(s) remaining).`);
     }
@@ -498,8 +536,10 @@ export function advanceWeek(state: GameState): GameState {
     }
 
     // Revenue: Sponsors + Merch + Content/Media
+    let sponsorIncomeThisWeek = 0;
     const activeSponsors = org.sponsors
       .map((sp) => {
+        sponsorIncomeThisWeek += sp.weeklyPayoutUSD;
         orgRevenue += sp.weeklyPayoutUSD;
         return { ...sp, weeksRemaining: sp.weeksRemaining - 1 };
       })
@@ -550,6 +590,47 @@ export function advanceWeek(state: GameState): GameState {
     org.lastWeekExpensesUSD = orgExpenses;
     org.orgXp = Math.min(10000, (org.orgXp ?? 0) + 15 + org.divisions.length * 10);
 
+    if (sponsorIncomeThisWeek > 0) {
+      weeklyEvents.push(
+        createWorldEvent(
+          { ...state, week: nextWeek, day: 1 },
+          {
+            id: `wevt_org_sponsor_${nextWeek}`,
+            type: 'SPONSORSHIP_PAYMENT_RECEIVED',
+            actorId: 'player_org',
+            title: 'Sponsorship Payout Credited',
+            description: `${org.name} received $${sponsorIncomeThisWeek.toLocaleString()} in weekly sponsor payouts.`,
+            importance: 'LOW',
+            payload: {
+              accountId: 'org_bank',
+              amountUSD: sponsorIncomeThisWeek,
+              notifyUser: sponsorIncomeThisWeek >= 2500,
+            },
+          }
+        )
+      );
+    }
+
+    if (playerSalaries + staffSalaries > 0) {
+      weeklyEvents.push(
+        createWorldEvent(
+          { ...state, week: nextWeek, day: 1 },
+          {
+            id: `wevt_org_payroll_${nextWeek}`,
+            type: 'SALARY_PAID',
+            actorId: 'player_org',
+            title: 'Weekly Club Payroll',
+            description: `Paid $${(playerSalaries + staffSalaries).toLocaleString()} in roster and staff salaries.`,
+            importance: 'LOW',
+            payload: {
+              accountId: 'org_bank',
+              amountUSD: playerSalaries + staffSalaries,
+            },
+          }
+        )
+      );
+    }
+
     // Passive follower growth
     const followerGrowth =
       Math.round(
@@ -594,7 +675,7 @@ export function advanceWeek(state: GameState): GameState {
     }
   }
 
-  // 6. Autonomous Rival AI & World Simulation
+  // 6. Autonomous Rival AI & Shared World Simulation
   const newWorldNews = [...state.worldNews];
   const updatedRivals = state.rivals.map((r) => {
     if (r.status === 'Bankrupt' || r.status === 'Acquired') return r;
@@ -613,6 +694,23 @@ export function advanceWeek(state: GameState): GameState {
         headline: `${r.name} Files for Restructuring Bankruptcy`,
         body: `Rising player salaries and missed international playoffs forced ${r.name} to pause operations.`,
       });
+      weeklyEvents.push(
+        createWorldEvent(
+          { ...state, week: nextWeek, day: 1 },
+          {
+            id: `wevt_bk_${r.id}_${nextWeek}`,
+            type: 'ORGANISATION_BANKRUPTCY',
+            actorId: r.id,
+            title: `${r.name} Files for Bankruptcy`,
+            description: `Financial strain forced ${r.name} into emergency restructuring.`,
+            importance: 'HIGH',
+            payload: {
+              teamName: r.name,
+              orgName: r.name,
+            },
+          }
+        )
+      );
     } else if (newBal < 180000) {
       status = 'Declining';
     }
@@ -627,19 +725,122 @@ export function advanceWeek(state: GameState): GameState {
     };
   });
 
-  // Occasional world tournament headline
-  if (nextWeek % 4 === 0) {
+  // Periodic world tournament events (every 2 weeks so Twitter, News, YouTube, Stocks stay alive in both careers)
+  if (nextWeek % 2 === 0) {
     const activeRivals = updatedRivals.filter((r) => r.status === 'Active');
-    if (activeRivals.length > 0) {
-      const champ = activeRivals[Math.floor(Math.random() * activeRivals.length)];
+    if (activeRivals.length >= 2) {
+      const champIdx = Math.floor(Math.random() * activeRivals.length);
+      const champ = activeRivals[champIdx];
+      const runnerUp = activeRivals[(champIdx + 1) % activeRivals.length];
       champ.trophies += 1;
       champ.reputation = Math.min(99, champ.reputation + 1);
+      const isMajor = nextWeek % 4 === 0;
+      const trnName = isMajor ? 'Global Masters Invitational' : 'Regional Pro Split';
       newWorldNews.unshift({
         id: `news_trn_${nextWeek}`,
         week: nextWeek,
-        headline: `${champ.name} Captures International Invitational Title`,
-        body: `${champ.name} climbed in the global rankings after sweeping the weekend finals.`,
+        headline: `${champ.name} Captures ${trnName} Title`,
+        body: `${champ.name} defeated ${runnerUp.name} in the finals to climb the global rankings.`,
       });
+      weeklyEvents.push(
+        createWorldEvent(
+          { ...state, week: nextWeek, day: 1 },
+          {
+            id: `wevt_world_trn_${nextWeek}`,
+            type: isMajor ? 'TOURNAMENT_COMPLETED' : 'MATCH_COMPLETED',
+            actorId: champ.id,
+            targetId: runnerUp.id,
+            title: `${champ.name} Win ${trnName}`,
+            description: `${champ.name} defeated ${runnerUp.name} (2 – 1) in ${trnName}.`,
+            importance: isMajor ? 'HIGH' : 'MEDIUM',
+            payload: {
+              teamName: champ.name,
+              orgColor: champ.color,
+              opponentName: runnerUp.name,
+              opponentId: runnerUp.id,
+              scoreLine: '2 – 1',
+              won: true,
+              mvpIgn: champ.tag,
+              tournamentName: trnName,
+              gameName: 'Vanguard Protocol',
+              winnerOrgId: champ.id,
+            },
+          }
+        )
+      );
+    }
+  }
+
+  // Independent fictional talents progression & world transfers (Kiwyos YT, Sparky, Adi Gamer)
+  let updatedMarket = [...state.marketPlayers];
+  if (nextWeek % 3 === 0) {
+    const activeRivals = updatedRivals.filter((r) => r.status === 'Active');
+    const risingNpc = updatedMarket.find((p) => p.isFictionalLegend && !p.orgId);
+    if (risingNpc && activeRivals.length > 0) {
+      const destOrg = activeRivals[Math.floor(Math.random() * activeRivals.length)];
+      updatedMarket = updatedMarket.map((p) =>
+        p.id === risingNpc.id
+          ? {
+              ...p,
+              orgId: destOrg.id,
+              overall: Math.min(95, p.overall + 1),
+              popularity: Math.min(99, (p.popularity ?? 55) + 4),
+              contractWeeksLeft: 30,
+            }
+          : p
+      );
+      weeklyEvents.push(
+        createWorldEvent(
+          { ...state, week: nextWeek, day: 1 },
+          {
+            id: `wevt_npc_sign_${risingNpc.id}_${nextWeek}`,
+            type: 'PLAYER_SIGNED',
+            actorId: destOrg.id,
+            title: `${destOrg.name} Sign Rising Star ${risingNpc.ign}`,
+            description: `${risingNpc.ign} agreed to terms with ${destOrg.name} after standout regional form.`,
+            importance: 'MEDIUM',
+            payload: {
+              teamName: destOrg.name,
+              orgColor: destOrg.color,
+              playerIgn: risingNpc.ign,
+              gameName: 'Competitive Circuit',
+            },
+          }
+        )
+      );
+    } else {
+      const notableNpc = updatedMarket.find((p) => p.isFictionalLegend);
+      if (notableNpc) {
+        updatedMarket = updatedMarket.map((p) =>
+          p.id === notableNpc.id
+            ? {
+                ...p,
+                overall: Math.min(96, p.overall + 1),
+                popularity: Math.min(99, (p.popularity ?? 65) + 3),
+                trophies: p.trophies + (Math.random() < 0.35 ? 1 : 0),
+              }
+            : p
+        );
+        if (Math.random() < 0.5) {
+          weeklyEvents.push(
+            createWorldEvent(
+              { ...state, week: nextWeek, day: 1 },
+              {
+                id: `wevt_npc_trend_${notableNpc.id}_${nextWeek}`,
+                type: 'PLAYER_TRENDING',
+                actorId: notableNpc.id,
+                title: `${notableNpc.ign} Trending After Highlight Week`,
+                description: `${notableNpc.ign} climbed to ${notableNpc.overall + 1} OVR with surging social buzz.`,
+                importance: 'LOW',
+                payload: {
+                  playerIgn: notableNpc.ign,
+                  teamName: updatedRivals.find((r) => r.id === notableNpc.orgId)?.name ?? 'Free Agency',
+                },
+              }
+            )
+          );
+        }
+      }
     }
   }
 
@@ -663,10 +864,9 @@ export function advanceWeek(state: GameState): GameState {
   updatedTournaments = [...openOrActive, ...completed];
 
   // Refresh a few free agents periodically
-  let updatedMarket = [...state.marketPlayers];
   if (nextWeek % 3 === 0 && updatedMarket.length < 95) {
     const tiers = ['Amateur', 'Semi-professional', 'Professional', 'Established professional'] as const;
-    const randomGame = org.divisions[0]?.gameId ?? 'vanguard_protocol';
+    const randomGame = org.divisions[0]?.gameId ?? state.playerCareer?.primaryGameId ?? 'vanguard_protocol';
     updatedMarket.unshift(
       generatePlayer(randomGame, tiers[Math.floor(Math.random() * tiers.length)], nextWeek)
     );
@@ -715,8 +915,47 @@ export function advanceWeek(state: GameState): GameState {
     },
   };
 
+  nextState = ensurePhoneState(nextState);
+
+  // Tick Player Career weekly if active
+  if (nextState.careerType === 'PLAYER' && nextState.playerCareer && !nextState.playerCareer.retired) {
+    const pcTick = tickPlayerCareerWeekly(nextState);
+    nextState = pcTick.nextState;
+    if (nextState.lastWeeklyRecap) {
+      nextState.lastWeeklyRecap = {
+        ...nextState.lastWeeklyRecap,
+        personalIncomeUSD: nextState.lastWeeklyRecap.personalIncomeUSD + pcTick.weeklySalaryIncome,
+        highlights: [...pcTick.highlights, ...nextState.lastWeeklyRecap.highlights],
+      };
+    }
+  }
+
+  // Tick Stock Market weekly prices
+  if (nextState.phoneState) {
+    const stockRng = createSeededRng(hashString(`${nextState.randomSeed ?? 1}:stocks:${nextWeek}`));
+    nextState = {
+      ...nextState,
+      phoneState: {
+        ...nextState.phoneState,
+        stockMarket: tickWeeklyStockMarket(
+          nextState.phoneState.stockMarket,
+          nextState.rivals,
+          nextState.org,
+          nextWeek,
+          1,
+          stockRng
+        ),
+      },
+    };
+  }
+
   if (nextState.org.founded) {
     nextState.org.valuationUSD = calculateOrgValuationUSD(nextState);
+  }
+
+  // Process all world events generated this week
+  if (weeklyEvents.length > 0) {
+    nextState = processWorldEvents(nextState, weeklyEvents);
   }
 
   // Check Achievements

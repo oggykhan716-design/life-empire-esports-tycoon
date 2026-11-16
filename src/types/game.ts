@@ -1,3 +1,18 @@
+import { CareerType, PlayerCareerState } from './career';
+import { BankAccount, BankTransaction, StockMarket } from './finance';
+import { ConversationMeta, Message, PhoneAppId, PhoneNotification } from './phone';
+import {
+  BrandCollabOffer,
+  InstagramAccount,
+  NewsArticle,
+  SocialPost,
+  Tweet,
+  TwitterAccount,
+  YouTubeChannel,
+  YouTubeVideo,
+} from './social';
+import { WorldEvent } from '../engine/events/types';
+
 export type NavTab = 'home' | 'career' | 'esports' | 'business' | 'world' | 'story';
 
 export type Gender = 'Male' | 'Female' | 'Non-binary';
@@ -165,6 +180,8 @@ export interface EsportsPlayer {
   orgId: string | null;
   scouted: boolean;
   trophies: number;
+  popularity?: number;
+  isFictionalLegend?: boolean;
 }
 
 export interface FacilityTier {
@@ -461,9 +478,31 @@ export interface EndingSummary {
   achievedWeek: number;
 }
 
+export interface PhoneState {
+  activeApp: PhoneAppId | null;
+  notifications: PhoneNotification[];
+  conversations: ConversationMeta[];
+  messages: Message[];
+  news: NewsArticle[];
+  twitterAccounts: TwitterAccount[];
+  tweets: Tweet[];
+  trendingTopics: { tag: string; postsCount: number; summary: string }[];
+  instagramAccount: InstagramAccount;
+  instagramPosts: SocialPost[];
+  brandCollabOffers: BrandCollabOffer[];
+  youtubeChannels: YouTubeChannel[];
+  youtubeVideos: YouTubeVideo[];
+  bankAccounts: BankAccount[];
+  transactions: BankTransaction[];
+  stockMarket: StockMarket;
+}
+
 export interface GameState {
   version: string;
+  schemaVersion?: number;
   saveSlotId: string;
+  careerType?: CareerType;
+  randomSeed?: number;
   week: number;
   year: number;
   energy: number;
@@ -473,6 +512,7 @@ export interface GameState {
   finances: PersonalFinances;
   registration: OrgRegistrationProgress;
   org: PlayerOrganization;
+  playerCareer?: PlayerCareerState;
   roster: EsportsPlayer[];
   marketPlayers: EsportsPlayer[];
   rivals: RivalOrganization[];
@@ -488,4 +528,7 @@ export interface GameState {
   day?: number;
   isSandbox?: boolean;
   devOverrides?: DevOverrides;
+  phoneState?: PhoneState;
+  eventHistory?: WorldEvent[];
+  processedEventIds?: string[];
 }

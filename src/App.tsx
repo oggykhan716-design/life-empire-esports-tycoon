@@ -11,6 +11,7 @@ import {
   Moon,
   Save,
   Settings,
+  Smartphone,
   Sun,
   Terminal,
 } from 'lucide-react';
@@ -21,19 +22,27 @@ import { DeveloperDashboardModal } from './components/DeveloperDashboardModal';
 import { EsportsView } from './components/EsportsView';
 import { HomeView } from './components/HomeView';
 import { EndingModal, EventModal, MatchModal, SaveModal } from './components/Modals';
+import { PlayerCareerView } from './components/PlayerCareerView';
 import { SettingsModal } from './components/SettingsModal';
 import { StoryView } from './components/StoryView';
 import { WorldView } from './components/WorldView';
+import { PhoneShell } from './components/phone/PhoneShell';
 import { getGameById } from './data/esportsTitles';
 import { FACILITY_TIERS, STAFF_ROLES } from './data/facilitiesAndStaff';
 import { EDUCATION_PROGRAMS, JOBS } from './data/jobs';
 import { INVESTMENT_PRODUCTS, LIFESTYLE_ITEMS } from './data/lifestyleAndInvestments';
+import {
+  createNewPlayerCareerState,
+  PlayerCareerSetup,
+} from './engine/career/playerCareerEngine';
 import {
   createSandboxGameState,
   devCreatePaperTeam,
   devSetOrgTypeAndStrategy,
 } from './engine/devAndSandbox';
 import { calculateOrgValuationUSD, formatCurrency } from './engine/economy';
+import { createWorldEvent, ensurePhoneState } from './engine/events/eventBus';
+import { processWorldEvents } from './engine/events/eventProcessor';
 import { simulateMatch } from './engine/matchEngine';
 import { evaluateContractOffer } from './engine/playerGenerator';
 import {
@@ -45,6 +54,7 @@ import {
   listDevSnapshots,
   listSaveSlots,
   loadGameFromSlot,
+  migrateGameState,
   SANDBOX_SLOT_ID,
   saveDevSnapshot,
   saveGameToSlot,
@@ -128,6 +138,7 @@ export default function App() {
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showDevDashboard, setShowDevDashboard] = useState(false);
+  const [showPhone, setShowPhone] = useState(false);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -174,6 +185,19 @@ export default function App() {
     setGameState(fresh);
     setActiveTab('home');
     setFeedback(`Career started in ${character.city}. Good luck!`);
+  };
+
+  const handleStartPlayerCareer = (
+    character: CharacterProfile,
+    setup: PlayerCareerSetup,
+    slotId: string
+  ) => {
+    const fresh = createNewPlayerCareerState(character, setup, slotId);
+    saveGameToSlot(fresh, slotId);
+    refreshSlotSummaries();
+    setGameState(fresh);
+    setActiveTab('career');
+    setFeedback(`Pro player journey started as ${setup.ign} in ${character.city}!`);
   };
 
   const handleLoadSave = (slotId: string) => {
@@ -252,6 +276,7 @@ export default function App() {
           existingSaves={saves}
           sandboxSummary={sandboxSummary}
           onStartNewGame={handleStartNewGame}
+          onStartPlayerCareer={handleStartPlayerCareer}
           onLoadSave={handleLoadSave}
           onDeleteSave={handleDeleteSave}
           onStartSandbox={(char, orgType, orgStrategy) =>
@@ -652,12 +677,32 @@ export default function App() {
       return;
     }
 
-    commitState({
+    let next = ensurePhoneState({
       ...gameState,
       roster: gameState.roster.map((p) =>
         p.id === playerId ? { ...p, isStarter: !p.isStarter } : p
       ),
     });
+
+    if (target.isStarter) {
+      const evt = createWorldEvent(next, {
+        type: 'PLAYER_BENCHED',
+        actorId: 'player_org',
+        targetId: target.id,
+        title: `${target.ign} Moved to Bench`,
+        description: `${next.org.name} shifted ${target.ign} out of the active starting lineup.`,
+        importance: 'MEDIUM',
+        payload: {
+          orgId: 'player_org',
+          teamName: next.org.name,
+          playerIgn: target.ign,
+          gameName: game.name,
+        },
+      });
+      next = processWorldEvents(next, [evt]);
+    }
+
+    commitState(next);
   };
 
   const handleSetCaptain = (playerId: string) => {
@@ -697,14 +742,27 @@ export default function App() {
   const handleReleasePlayer = (playerId: string) => {
     const target = gameState.roster.find((p) => p.id === playerId);
     if (!target) return;
-    commitState(
-      {
-        ...gameState,
-        roster: gameState.roster.filter((p) => p.id !== playerId),
-        marketPlayers: [{ ...target, orgId: null, isStarter: false, isCaptain: false }, ...gameState.marketPlayers],
+    let next = ensurePhoneState({
+      ...gameState,
+      roster: gameState.roster.filter((p) => p.id !== playerId),
+      marketPlayers: [{ ...target, orgId: null, isStarter: false, isCaptain: false }, ...gameState.marketPlayers],
+    });
+    const evt = createWorldEvent(next, {
+      type: 'PLAYER_RELEASED',
+      actorId: 'player_org',
+      targetId: target.id,
+      title: `${target.ign} Released`,
+      description: `${next.org.name} parted ways with ${target.ign}, who enters free agency.`,
+      importance: 'MEDIUM',
+      payload: {
+        orgId: 'player_org',
+        teamName: next.org.name,
+        playerIgn: target.ign,
+        gameName: getGameById(target.gameId).name,
       },
-      `Released ${target.ign} to free agency.`
-    );
+    });
+    next = processWorldEvents(next, [evt]);
+    commitState(next, `Released ${target.ign} to free agency.`);
   };
 
   const handleScoutPlayer = (playerId: string) => {
@@ -761,7 +819,7 @@ export default function App() {
       isCaptain: gameState.roster.filter((p) => p.gameId === player.gameId).length === 0,
     };
 
-    const nextState: GameState = {
+    let nextState: GameState = ensurePhoneState({
       ...gameState,
       energy: gameState.energy - costs.contractNegotiation,
       org: {
@@ -781,8 +839,26 @@ export default function App() {
         },
         ...gameState.history,
       ].slice(0, 80),
-    };
+    });
     nextState.org.valuationUSD = calculateOrgValuationUSD(nextState);
+    const signEvt = createWorldEvent(nextState, {
+      type: 'PLAYER_SIGNED',
+      actorId: 'player_org',
+      targetId: player.id,
+      title: `${nextState.org.name} Sign ${player.ign}`,
+      description: `${nextState.org.name} finalized a $${offeredMonthlyUSD.toLocaleString()}/mo contract with ${player.ign} (${game.name}).`,
+      importance: player.overall >= 78 ? 'HIGH' : 'MEDIUM',
+      payload: {
+        orgId: 'player_org',
+        teamName: nextState.org.name,
+        playerIgn: player.ign,
+        gameName: game.name,
+        signingFeeUSD,
+        orgColor: nextState.org.color,
+        notifyUser: true,
+      },
+    });
+    nextState = processWorldEvents(nextState, [signEvt]);
     commitState(nextState, evaluation.reason);
   };
 
@@ -942,26 +1018,40 @@ export default function App() {
     const role = STAFF_ROLES.find((r) => r.id === roleId);
     if (!role) return;
     const name = STAFF_NAMES[Math.floor(Math.random() * STAFF_NAMES.length)];
-    commitState(
-      {
-        ...gameState,
-        org: {
-          ...gameState.org,
-          staff: [
-            ...gameState.org.staff,
-            {
-              id: `st_${Date.now()}`,
-              roleId,
-              name,
-              skill: 72 + Math.floor(Math.random() * 18),
-              experience: 5 + Math.floor(Math.random() * 8),
-              weeklySalaryUSD: role.baseWeeklySalaryUSD,
-            },
-          ],
-        },
+    let next = ensurePhoneState({
+      ...gameState,
+      org: {
+        ...gameState.org,
+        staff: [
+          ...gameState.org.staff,
+          {
+            id: `st_${Date.now()}`,
+            roleId,
+            name,
+            skill: 72 + Math.floor(Math.random() * 18),
+            experience: 5 + Math.floor(Math.random() * 8),
+            weeklySalaryUSD: role.baseWeeklySalaryUSD,
+          },
+        ],
       },
-      `Hired ${name} as ${role.title}.`
-    );
+    });
+    if (
+      roleId === 'head_coach' ||
+      roleId === 'assistant_coach' ||
+      roleId === 'analyst' ||
+      roleId === 'team_manager'
+    ) {
+      const evt = createWorldEvent(next, {
+        type: 'COACH_HIRED',
+        actorId: 'player_org',
+        title: `${next.org.name} Hire ${name}`,
+        description: `${name} joins ${next.org.name} as ${role.title}.`,
+        importance: 'LOW',
+        payload: { teamName: next.org.name, staffName: name, role: role.title },
+      });
+      next = processWorldEvents(next, [evt]);
+    }
+    commitState(next, `Hired ${name} as ${role.title}.`);
   };
 
   const handleFireStaff = (staffId: string) => {
@@ -984,17 +1074,35 @@ export default function App() {
     const deal = available.find((s) => s.id === sponsorId);
     if (!deal) return;
 
-    commitState(
-      {
-        ...gameState,
-        energy: gameState.energy - costs.contractNegotiation,
-        org: {
-          ...gameState.org,
-          bankBalanceUSD: gameState.org.bankBalanceUSD + deal.signingBonusUSD,
-          sponsors: [...gameState.org.sponsors, deal],
-          reputation: Math.min(100, gameState.org.reputation + 2),
-        },
+    let next = ensurePhoneState({
+      ...gameState,
+      energy: gameState.energy - costs.contractNegotiation,
+      org: {
+        ...gameState.org,
+        bankBalanceUSD: gameState.org.bankBalanceUSD + deal.signingBonusUSD,
+        sponsors: [...gameState.org.sponsors, deal],
+        reputation: Math.min(100, gameState.org.reputation + 2),
       },
+    });
+    const evt = createWorldEvent(next, {
+      type: 'SPONSORSHIP_SIGNED',
+      actorId: 'player_org',
+      title: `${next.org.name} Partner With ${deal.brandName}`,
+      description: `${deal.brandName} signed on with ${next.org.name} (+$${deal.signingBonusUSD.toLocaleString()} signing bonus).`,
+      importance: deal.weeklyPayoutUSD >= 2000 ? 'HIGH' : 'MEDIUM',
+      payload: {
+        orgId: 'player_org',
+        teamName: next.org.name,
+        brandName: deal.brandName,
+        accountId: 'org_bank',
+        amountUSD: deal.signingBonusUSD,
+        orgColor: next.org.color,
+        notifyUser: true,
+      },
+    });
+    next = processWorldEvents(next, [evt]);
+    commitState(
+      next,
       `Signed sponsorship with ${deal.brandName}! Received ${formatCurrency(deal.signingBonusUSD, gameState.character.countryId)} signing bonus.`
     );
   };
@@ -1219,6 +1327,10 @@ export default function App() {
     commitState(restored, `Restored snapshot: ${target.label}`);
   };
 
+  const phoneUnreadCount =
+    (gameState.phoneState?.notifications.filter((n) => !n.isRead).length ?? 0) +
+    (gameState.phoneState?.messages.filter((m) => !m.isRead).length ?? 0);
+
   return (
     <div className="min-h-screen bg-[#F3F5F9] dark:bg-[#0B0E14] text-slate-900 dark:text-slate-100 flex">
       {/* Desktop Left Sidebar */}
@@ -1262,6 +1374,22 @@ export default function App() {
         </div>
 
         <div className="space-y-2.5 pt-4 border-t border-slate-100 dark:border-slate-800">
+          <button
+            type="button"
+            onClick={() => setShowPhone(true)}
+            className="w-full min-h-[44px] px-4 py-2 rounded-xl bg-[#0D1422] hover:bg-slate-800 border border-blue-500/40 text-white text-sm font-display font-semibold flex items-center justify-between transition-colors"
+          >
+            <span className="flex items-center gap-2">
+              <Smartphone size={16} className="text-blue-400" />
+              Phone
+            </span>
+            {phoneUnreadCount > 0 && (
+              <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-red-500 text-white font-mono text-[11px] font-bold inline-flex items-center justify-center">
+                {phoneUnreadCount > 99 ? '99+' : phoneUnreadCount}
+              </span>
+            )}
+          </button>
+
           <button
             type="button"
             onClick={handleAdvanceWeek}
@@ -1339,6 +1467,21 @@ export default function App() {
                 </strong>
               </div>
             )}
+
+            <button
+              type="button"
+              onClick={() => setShowPhone(true)}
+              aria-label="Open Phone"
+              className="relative min-h-[38px] px-2.5 rounded-lg border border-blue-500/40 bg-blue-600/10 text-blue-400 text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap"
+            >
+              <Smartphone size={15} />
+              <span className="hidden xs:inline">Phone</span>
+              {phoneUnreadCount > 0 && (
+                <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white font-mono text-[10px] font-bold inline-flex items-center justify-center">
+                  {phoneUnreadCount > 99 ? '99+' : phoneUnreadCount}
+                </span>
+              )}
+            </button>
 
             <div className="flex lg:hidden items-center gap-1.5">
               <button
@@ -1432,6 +1575,8 @@ export default function App() {
             <HomeView
               state={gameState}
               onNavigate={setActiveTab}
+              onOpenPhone={() => setShowPhone(true)}
+              phoneUnreadCount={phoneUnreadCount}
               onWorkShift={handleWorkShift}
               onBusinessResearch={handleBusinessResearch}
               onNetworking={handleNetworking}
@@ -1439,16 +1584,25 @@ export default function App() {
               onTriggerEnding={handleTriggerEnding}
             />
           )}
-          {activeTab === 'career' && (
-            <CareerView
-              state={gameState}
-              onApplyJob={handleApplyJob}
-              onResignJob={handleResignJob}
-              onWorkShift={handleWorkShift}
-              onStudyProgram={handleStudyProgram}
-              onTrainSkill={handleTrainSkill}
-            />
-          )}
+          {activeTab === 'career' &&
+            (gameState.careerType === 'PLAYER' &&
+            gameState.playerCareer &&
+            !gameState.playerCareer.retired ? (
+              <PlayerCareerView
+                state={gameState}
+                onUpdateState={commitState}
+                onOpenPhone={() => setShowPhone(true)}
+              />
+            ) : (
+              <CareerView
+                state={gameState}
+                onApplyJob={handleApplyJob}
+                onResignJob={handleResignJob}
+                onWorkShift={handleWorkShift}
+                onStudyProgram={handleStudyProgram}
+                onTrainSkill={handleTrainSkill}
+              />
+            ))}
           {activeTab === 'esports' && (
             <EsportsView
               state={gameState}
@@ -1574,13 +1728,21 @@ export default function App() {
             try {
               const parsed = JSON.parse(raw);
               if (parsed?.character && parsed?.finances) {
-                commitState(parsed, 'Career imported successfully.');
+                commitState(migrateGameState(parsed), 'Career imported successfully.');
               }
             } catch {
               setFeedback('Invalid career JSON format.');
             }
           }}
           onClose={() => setShowSaveModal(false)}
+        />
+      )}
+
+      {showPhone && (
+        <PhoneShell
+          state={gameState}
+          onUpdateState={commitState}
+          onClose={() => setShowPhone(false)}
         />
       )}
 

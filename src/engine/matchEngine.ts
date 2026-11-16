@@ -8,6 +8,9 @@ import {
   OrgDivision,
   RivalOrganization,
 } from '../types/game';
+import { createWorldEvent } from './events/eventBus';
+import { processWorldEvents } from './events/eventProcessor';
+import { WorldEvent } from './events/types';
 
 export function computeTeamRating(
   starters: EsportsPlayer[],
@@ -233,7 +236,7 @@ export function simulateMatch(
     ? Math.round((isFinalRound ? 6500 : 1400) * (1 + tierRepBonus[tournament.tier] * 0.15))
     : 200;
 
-  const updatedState: GameState = {
+  let updatedState: GameState = {
     ...state,
     roster: updatedRoster,
     tournaments: updatedTournaments,
@@ -259,6 +262,60 @@ export function simulateMatch(
       ...state.history,
     ].slice(0, 80),
   };
+
+  // Emit structured World Events
+  const events: WorldEvent[] = [];
+  const isHighTier =
+    tournament.tier === 'International Qualifier' ||
+    tournament.tier === 'Major International' ||
+    tournament.tier === 'World Championship';
+
+  events.push(
+    createWorldEvent(updatedState, {
+      id: `wevt_${report.id}_${won && isFinalRound ? 'trn' : 'mat'}`,
+      type: won && isFinalRound ? 'TOURNAMENT_COMPLETED' : 'MATCH_COMPLETED',
+      actorId: 'player_org',
+      targetId: opponent.id,
+      title:
+        won && isFinalRound
+          ? `${state.org.name} Win ${tournament.name}!`
+          : `${state.org.name} ${won ? 'Defeat' : 'Fall to'} ${opponent.name}`,
+      description: `${state.org.name} ${won ? 'beat' : 'fell to'} ${opponent.name} (${scoreLine}) on ${mapName}. MVP: ${mvp.ign}.`,
+      importance: (won && isFinalRound) || isHighTier ? 'HIGH' : 'MEDIUM',
+      payload: {
+        teamName: state.org.name,
+        orgColor: state.org.color,
+        opponentName: opponent.name,
+        opponentId: opponent.id,
+        scoreLine,
+        won,
+        mvpIgn: mvp.ign,
+        tournamentName: tournament.name,
+        gameName: game.name,
+        winnerOrgId: won ? 'player_org' : opponent.id,
+        notifyUser: true,
+      },
+    })
+  );
+
+  if (matchPrizeUSD + sponsorBonus > 0) {
+    events.push(
+      createWorldEvent(updatedState, {
+        id: `wevt_prize_${report.id}`,
+        type: 'TOURNAMENT_PRIZE_RECEIVED',
+        actorId: 'player_org',
+        title: 'Tournament Prize Deposited',
+        description: `${tournament.name} payout (+$${(matchPrizeUSD + sponsorBonus).toLocaleString()})`,
+        importance: matchPrizeUSD >= 25000 ? 'MEDIUM' : 'LOW',
+        payload: {
+          accountId: 'org_bank',
+          amountUSD: matchPrizeUSD + sponsorBonus,
+        },
+      })
+    );
+  }
+
+  updatedState = processWorldEvents(updatedState, events);
 
   return { report, updatedState };
 }

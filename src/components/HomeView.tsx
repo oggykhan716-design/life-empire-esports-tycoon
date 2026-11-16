@@ -5,6 +5,7 @@ import {
   Building2,
   Compass,
   Flag,
+  Smartphone,
   TrendingUp,
   Trophy,
   Zap,
@@ -25,6 +26,8 @@ import { OrgCrest } from './OrgCrest';
 interface HomeViewProps {
   state: GameState;
   onNavigate: (tab: NavTab) => void;
+  onOpenPhone?: () => void;
+  phoneUnreadCount?: number;
   onWorkShift: () => void;
   onBusinessResearch: () => void;
   onNetworking: () => void;
@@ -35,6 +38,8 @@ interface HomeViewProps {
 export const HomeView: React.FC<HomeViewProps> = ({
   state,
   onNavigate,
+  onOpenPhone,
+  phoneUnreadCount = 0,
   onWorkShift,
   onBusinessResearch,
   onNetworking,
@@ -82,10 +87,18 @@ export const HomeView: React.FC<HomeViewProps> = ({
                 <span>{state.character.education}</span>
               </div>
               <h2 className="font-display text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
-                {state.character.firstName} {state.character.lastName}
+                {state.careerType === 'PLAYER' && state.playerCareer && !state.playerCareer.retired
+                  ? `${state.playerCareer.ign} · ${state.character.firstName} ${state.character.lastName}`
+                  : `${state.character.firstName} ${state.character.lastName}`}
               </h2>
               <p className="text-sm text-slate-600 dark:text-slate-300">
-                {state.org.founded
+                {state.careerType === 'PLAYER' && state.playerCareer && !state.playerCareer.retired
+                  ? `${state.playerCareer.rank} · ${getGameById(state.playerCareer.primaryGameId).name} · ${
+                      state.playerCareer.currentOrgName
+                        ? `Roster: ${state.playerCareer.currentOrgName}`
+                        : 'Free Agent'
+                    }`
+                  : state.org.founded
                   ? `Founder & CEO · ${state.org.name} [${state.org.tag}] · ${activeFacility?.name ?? 'Small Office'}`
                   : state.registration.approvalWeeksRemaining > 0
                   ? `Organization application pending review (${state.registration.approvalWeeksRemaining} wk left)`
@@ -95,8 +108,23 @@ export const HomeView: React.FC<HomeViewProps> = ({
               </p>
             </div>
 
-            {state.org.founded && (
-              <div className="flex items-center gap-3 shrink-0">
+            <div className="flex items-center gap-3 shrink-0">
+              {onOpenPhone && (
+                <button
+                  type="button"
+                  onClick={onOpenPhone}
+                  className="relative min-h-[44px] px-4 py-2 rounded-xl bg-[#0D1422] hover:bg-slate-800 border border-blue-500/40 text-white text-xs font-semibold inline-flex items-center gap-2 transition-colors whitespace-nowrap"
+                >
+                  <Smartphone size={16} className="text-blue-400" />
+                  Open Phone
+                  {phoneUnreadCount > 0 && (
+                    <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-red-500 text-white font-mono text-[10px] font-bold inline-flex items-center justify-center">
+                      {phoneUnreadCount > 99 ? '99+' : phoneUnreadCount}
+                    </span>
+                  )}
+                </button>
+              )}
+              {state.org.founded && (
                 <OrgCrest
                   name={state.org.name}
                   tag={state.org.tag}
@@ -104,8 +132,8 @@ export const HomeView: React.FC<HomeViewProps> = ({
                   icon={state.org.icon}
                   size="xl"
                 />
-              </div>
-            )}
+              )}
+            </div>
           </div>
 
           {/* 4-Card KPI Telemetry Row */}
@@ -229,7 +257,26 @@ export const HomeView: React.FC<HomeViewProps> = ({
             </div>
 
             <div className="space-y-2.5">
-              {currentJob ? (
+              {state.careerType === 'PLAYER' && state.playerCareer && !state.playerCareer.retired ? (
+                <button
+                  type="button"
+                  onClick={() => onNavigate('career')}
+                  className="w-full min-h-[48px] px-4 py-2.5 rounded-xl border border-purple-500/40 bg-purple-600/10 flex items-center justify-between text-left hover:bg-purple-600/15 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <Briefcase size={18} className="text-purple-400" />
+                    <div>
+                      <div className="text-sm font-semibold text-slate-900 dark:text-white">
+                        Pro Player Hub ({state.playerCareer.rank})
+                      </div>
+                      <div className="text-xs text-slate-500 dark:text-slate-400">
+                        Play matches, train attributes &amp; review tryouts
+                      </div>
+                    </div>
+                  </div>
+                  <ArrowRight size={16} className="text-purple-400" />
+                </button>
+              ) : currentJob ? (
                 <button
                   type="button"
                   onClick={onWorkShift}
